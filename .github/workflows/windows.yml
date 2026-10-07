@@ -1,0 +1,61 @@
+name: Windows
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+    paths: ["windows/**", ".github/workflows/windows.yml"]
+  pull_request:
+    paths: ["windows/**", ".github/workflows/windows.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Host core tests (protocol, crypto, adapters, end-to-end)
+        run: dotnet test windows/tests/Conduit.Host.Core.Tests -c Release
+
+  publish:
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Publish WinUI 3 app (unpackaged, self-contained)
+        shell: pwsh
+        run: |
+          $platform = if ("${{ matrix.arch }}" -eq "x64") { "x64" } else { "ARM64" }
+          dotnet publish windows/src/Conduit.Host/Conduit.Host.csproj -c Release `
+            -r win-${{ matrix.arch }} -p:Platform=$platform --self-contained true `
+            -o out/ConduitHost-win-${{ matrix.arch }}
+          dotnet publish windows/src/Conduit.Host.Cli/Conduit.Host.Cli.csproj -c Release `
+            -r win-${{ matrix.arch }} --self-contained true -p:PublishSingleFile=true `
+            -o out/ConduitHost-win-${{ matrix.arch }}/cli
+          if (!(Test-Path out/ConduitHost-win-${{ matrix.arch }}/ConduitHost.exe)) { throw "ConduitHost.exe missing" }
+          Compress-Archive -Path out/ConduitHost-win-${{ matrix.arch }}/* -DestinationPath out/ConduitHost-win-${{ matrix.arch }}.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ConduitHost-win-${{ matrix.arch }}
+          path: out/ConduitHost-win-${{ matrix.arch }}.zip
+          if-no-files-found: error
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/ConduitHost-win-${{ matrix.arch }}.zip

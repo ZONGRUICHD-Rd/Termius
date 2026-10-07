@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Conduit.Host.Pages.AgentsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Conduit.Host"
+    Background="Transparent">
+
+    <ScrollViewer>
+        <StackPanel Padding="40,28,40,40" MaxWidth="1040">
+            <Grid>
+                <TextBlock Text="Agents" Style="{StaticResource PageTitle}" />
+                <Button x:Name="RescanButton" Content="Rescan" HorizontalAlignment="Right" Click="Rescan_Click" />
+            </Grid>
+            <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}"
+                       Text="Conduit drives each agent through its official machine interface and uses your existing logins and settings. Installed agents are found on PATH and in their default locations; point to a custom install with Browse." />
+
+            <ItemsControl x:Name="AgentList" Margin="0,20,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="local:AgentItem">
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="{x:Bind Name}" FontSize="18" FontFamily="{StaticResource ConduitSerif}" />
+                                        <TextBlock Text="{x:Bind Vendor}" Foreground="{ThemeResource ConduitInkSoftBrush}" VerticalAlignment="Bottom" />
+                                    </StackPanel>
+                                    <TextBlock Text="{x:Bind Detail}" FontSize="12" Foreground="{ThemeResource ConduitInkSoftBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{x:Bind PathText}" FontSize="12" FontFamily="Cascadia Mono, Consolas" TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <TextBlock Text="{x:Bind Status}" Foreground="{x:Bind StatusBrush}" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                                    <Button Content="Browse…" Tag="{x:Bind Id}" Click="Browse_Click" Visibility="{x:Bind BrowseVisibility}" HorizontalAlignment="Right" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="HOW TO INSTALL" Style="{StaticResource Eyebrow}" />
+            <Border Style="{StaticResource Card}">
+                <StackPanel Spacing="6">
+                    <TextBlock TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="Claude" /><Run Text=" — install Claude Desktop (includes Claude Code) or run: irm https://claude.ai/install.ps1 | iex" /></TextBlock>
+                    <TextBlock TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="Codex" /><Run Text=" — install Codex Desktop, or: npm i -g @openai/codex" /></TextBlock>
+                    <TextBlock TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="Pi" /><Run Text=" — npm i -g @mariozechner/pi-coding-agent" /></TextBlock>
+                    <TextBlock TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="opencode" /><Run Text=" — npm i -g opencode-ai  (or scoop install opencode)" /></TextBlock>
+                    <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}" FontSize="12"
+                               Text="Sign in to each agent once on this PC; Conduit reuses those credentials and never sees them." />
+                </StackPanel>
+            </Border>
+
+            <ToggleSwitch x:Name="DemoToggle" Margin="0,16,0,0" Header="Demo agent (try the app without installing anything)" Toggled="Demo_Toggled" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

@@ -1,0 +1,22 @@
+# One-command relay with automatic HTTPS (Let's Encrypt via Caddy).
+#   RELAY_DOMAIN=relay.example.com docker compose up -d
+# Then set "wss://relay.example.com" as the relay URL in Conduit Host → Settings.
+services:
+  relay:
+    build: .
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - RELAY_DOMAIN=${RELAY_DOMAIN:?set RELAY_DOMAIN}
+    command: caddy reverse-proxy --from ${RELAY_DOMAIN} --to relay:8080
+    volumes:
+      - caddy_data:/data
+volumes:
+  caddy_data:

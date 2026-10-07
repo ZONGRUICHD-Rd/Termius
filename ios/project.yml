@@ -1,0 +1,93 @@
+name: Conduit
+options:
+  bundleIdPrefix: dev.conduit
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+packages:
+  ConduitKit:
+    path: ConduitKit
+targets:
+  Conduit:
+    type: application
+    platform: iOS
+    sources:
+      - path: Conduit
+      - path: Shared
+    dependencies:
+      - package: ConduitKit
+      - target: ConduitWidgets
+        embed: true
+        codeSign: false
+    info:
+      path: Conduit/Info.plist
+      properties:
+        CFBundleDisplayName: Conduit
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIRequiredDeviceCapabilities: [arm64]
+        NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: true
+        NSCameraUsageDescription: Conduit uses the camera to scan the pairing QR code shown on your computer.
+        NSLocalNetworkUsageDescription: Conduit connects directly to Conduit Host on your local network for the fastest connection.
+        ITSAppUsesNonExemptEncryption: false
+        CFBundleURLTypes:
+          - CFBundleURLName: dev.conduit.app
+            CFBundleURLSchemes: [conduit]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.conduit.app
+        PRODUCT_NAME: Conduit
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        INFOPLIST_KEY_UIUserInterfaceStyle: Automatic
+  ConduitWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ConduitWidgets
+      - path: Shared
+    info:
+      path: ConduitWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Conduit
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.conduit.app.widgets
+        PRODUCT_NAME: ConduitWidgets
+        SKIP_INSTALL: YES
+schemes:
+  Conduit:
+    build:
+      targets:
+        Conduit: all
+    run:
+      config: Debug
+    archive:
+      config: Release

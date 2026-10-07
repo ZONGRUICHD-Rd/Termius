@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Conduit.Host.Pages.SessionsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Conduit.Host"
+    Background="Transparent">
+
+    <ScrollViewer>
+        <StackPanel Padding="40,28,40,40" MaxWidth="1040">
+            <TextBlock Text="Sessions" Style="{StaticResource PageTitle}" />
+            <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}"
+                       Text="Every conversation started from a phone. Sessions persist across restarts and resume with the agent's own session history." />
+            <TextBlock x:Name="Empty" Margin="0,20,0,0" Text="No sessions yet." Foreground="{ThemeResource ConduitInkSoftBrush}" />
+            <ItemsControl x:Name="SessionList" Margin="0,20,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="local:SessionItem">
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="16,12">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Width="10" Height="10" Fill="{x:Bind StateBrush}" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind Detail}" FontSize="12" Foreground="{ThemeResource ConduitInkSoftBrush}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock FontSize="12" Foreground="{ThemeResource ConduitInkSoftBrush}">
+                                        <Run Text="{x:Bind AgentName}" /><Run Text=" · " /><Run Text="{x:Bind Folder}" /><Run Text=" · " /><Run Text="{x:Bind Updated}" />
+                                    </TextBlock>
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="{x:Bind StateLabel}" Foreground="{x:Bind StateBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Button Content="Stop" Tag="{x:Bind Id}" Click="Stop_Click" Visibility="{x:Bind StopVisibility}" />
+                                    <Button Tag="{x:Bind Id}" Click="Delete_Click" ToolTipService.ToolTip="Delete">
+                                        <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</Page>
