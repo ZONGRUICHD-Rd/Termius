@@ -12,6 +12,8 @@ namespace Conduit.Host;
 public sealed partial class MainWindow : Window
 {
     private readonly DispatcherQueueTimer _refresh;
+    // Must stay referenced: a DispatcherQueueTimer held only by a local is collected and silently stops ticking.
+    private DispatcherQueueTimer? _smokeTimer;
     private bool _dirty = true;
 
     /// <summary>Last time the UI thread ran the refresh timer (smoke-test diagnostics).</summary>
@@ -68,7 +70,7 @@ public sealed partial class MainWindow : Window
             });
             var marker = Environment.GetEnvironmentVariable("CONDUIT_SMOKE_MARKER");
             var step = 0;
-            var timer = DispatcherQueue.CreateTimer();
+            var timer = _smokeTimer = DispatcherQueue.CreateTimer();
             timer.Interval = TimeSpan.FromSeconds(2);
             timer.Tick += (t, _) =>
             {
