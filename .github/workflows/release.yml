@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to (re)publish, e.g. v1.0.0"
+        description: "Release tag to create or update, e.g. v1.0.0"
         required: true
 
 permissions:
@@ -63,6 +63,8 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          # Creates the tag on this commit if it doesn't exist yet (manual runs).
+          target_commitish: ${{ github.sha }}
           name: Conduit ${{ github.event.inputs.tag || github.ref_name }}
           body_path: docs/RELEASE_NOTES.md
           files: dist/*
