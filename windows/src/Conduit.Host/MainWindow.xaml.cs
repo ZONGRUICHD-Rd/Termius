@@ -40,6 +40,8 @@ public sealed partial class MainWindow : Window
         _refresh.Start();
         App.Runtime.Changed += () => _dirty = true;
 
+        Activated += (_, _) => Program.WindowShown.Set();
+
         // Navigate once the window is fully constructed.
         DispatcherQueue.TryEnqueue(() => Nav.SelectedItem = Nav.MenuItems[0]);
 
@@ -55,7 +57,14 @@ public sealed partial class MainWindow : Window
             timer.Interval = TimeSpan.FromSeconds(2);
             timer.Tick += (t, _) =>
             {
-                if (tour.Count == 0) { t.Stop(); App.Runtime.Log("Smoke tour complete"); return; }
+                if (tour.Count == 0)
+                {
+                    t.Stop();
+                    App.Runtime.Log("Smoke tour complete");
+                    if (Environment.GetEnvironmentVariable("CONDUIT_SMOKE_MARKER") is { Length: > 0 } marker)
+                        File.WriteAllText(marker, $"ok pid={Environment.ProcessId}");
+                    return;
+                }
                 tour.Dequeue()();
             };
             timer.Start();
@@ -101,6 +110,17 @@ public sealed partial class MainWindow : Window
         };
         ContentFrame.Navigate(page);
     }
+
+    public void BringToFront()
+    {
+        if (AppWindow.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Minimized) p.Restore();
+        AppWindow.Show();
+        Activate();
+        SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     public void NavigateTo(string tag)
     {

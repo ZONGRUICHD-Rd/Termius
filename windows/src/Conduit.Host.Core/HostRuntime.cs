@@ -75,8 +75,11 @@ public sealed class HostRuntime : IAsyncDisposable
         };
     }
 
+    /// <summary>%LOCALAPPDATA%\Conduit, or CONDUIT_DATA_DIR when set (used by tests to stay isolated).</summary>
     public static string DefaultDataDirectory() =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Conduit");
+        Environment.GetEnvironmentVariable("CONDUIT_DATA_DIR") is { Length: > 0 } dir
+            ? dir
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Conduit");
 
     public async Task StartAsync(CancellationToken ct = default)
     {

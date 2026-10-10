@@ -14,7 +14,7 @@
     <!-- Unpackaged: a plain folder / zip, no MSIX or certificate needed. -->
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <!-- Required for unpackaged apps too: generates ConduitHost.pri, which holds the compiled XAML (.xbf).
+    <!-- Required for unpackaged apps too: generates resources.pri, which holds the compiled XAML (.xbf).
          Without it the app exits silently at startup. -->
     <EnableMsixTooling>true</EnableMsixTooling>
     <!-- Own Main (Program.cs) so startup failures are logged and shown instead of a silent exit. -->
@@ -46,7 +46,9 @@
       <_ConduitPri Include="$(OutDir)*.pri" Exclude="$(OutDir)Microsoft.*.pri" />
       <_ConduitPri Include="$(ProjectPriFullPath)" Condition="'$(ProjectPriFullPath)' != '' And Exists('$(ProjectPriFullPath)')" />
     </ItemGroup>
+    <Error Condition="'@(_ConduitPri)' == ''" Text="App PRI (resources.pri) was not generated — the published app would not be able to load its XAML." />
     <Copy SourceFiles="@(_ConduitPri)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+    <Error Condition="!Exists('$(PublishDir)resources.pri')" Text="resources.pri is missing from $(PublishDir)." />
     <Message Importance="high" Text="Conduit PRI copied to publish: @(_ConduitPri)" />
   </Target>
 

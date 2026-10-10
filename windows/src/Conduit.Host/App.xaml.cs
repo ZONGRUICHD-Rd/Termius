@@ -7,7 +7,6 @@ namespace Conduit.Host;
 
 public partial class App : Application
 {
-    private static Mutex? _singleInstance;
     private MainWindow? _window;
 
     public static HostRuntime Runtime { get; private set; } = null!;
@@ -19,33 +18,49 @@ public partial class App : Application
         UnhandledException += (_, e) =>
         {
             Runtime?.Log("Unhandled: " + e.Exception.Message);
-            CrashReporter.Report(e.Exception, "Unexpected error");
+            CrashReporter.Report(e.Exception, "发生意外错误");
             e.Handled = true;
         };
     }
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
-        _singleInstance = new Mutex(true, "Conduit.Host.SingleInstance", out var isFirst);
-        if (!isFirst)
-        {
-            Exit();
-            return;
-        }
-
         try
         {
             Runtime = new HostRuntime(HostRuntime.DefaultDataDirectory(), new DpapiProtector());
             _window = new MainWindow();
             Window = _window;
             _window.Activate();
+            ListenForActivation(_window);
             await Runtime.StartAsync();
         }
         catch (Exception ex)
         {
-            CrashReporter.Report(ex, "Conduit Host could not start");
-            Exit();
+            CrashReporter.Report(ex, "Conduit Host 无法启动");
+            // Exit the whole process so no invisible instance keeps the single-instance lock.
+            Environment.Exit(1);
         }
+    }
+
+    /// <summary>A second launch signals this event; bring the existing window to the front and acknowledge.</summary>
+    private static void ListenForActivation(MainWindow window)
+    {
+        var activate = new EventWaitHandle(false, EventResetMode.AutoReset, Program.ActivateEventName);
+        var ack = new EventWaitHandle(false, EventResetMode.AutoReset, Program.ActivatedAckEventName);
+        var thread = new Thread(() =>
+        {
+            while (true)
+            {
+                activate.WaitOne();
+                window.DispatcherQueue.TryEnqueue(() =>
+                {
+                    window.BringToFront();
+                    ack.Set();
+                });
+            }
+        })
+        { IsBackground = true, Name = "Activation listener" };
+        thread.Start();
     }
 }
 

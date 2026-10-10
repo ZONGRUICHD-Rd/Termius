@@ -56,32 +56,31 @@ jobs:
           if (!(Test-Path "$dir/ConduitHost.exe")) { throw "ConduitHost.exe missing" }
           Get-ChildItem $dir | Select-Object -First 30 | Format-Table Name, Length
           Compress-Archive -Path "$dir/*" -DestinationPath "out/ConduitHost-win-$arch.zip"
-      - name: Smoke test — launch the app and check it stays up
-        if: matrix.arch == 'x64'
-        shell: pwsh
-        run: |
-          $dir = "out/ConduitHost-win-x64"
-          "PRI/XBF files produced by the build:"
-          Get-ChildItem -Recurse windows/src/Conduit.Host/bin, windows/src/Conduit.Host/obj, $dir -Include *.pri, *.xbf -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -notlike "Microsoft.*" } | ForEach-Object { $_.FullName }
-          $pri = Get-ChildItem $dir -Filter *.pri | Where-Object { $_.Name -notlike "Microsoft.*" }
-          if (!$pri) { throw "App PRI (compiled XAML) missing from the publish folder" }
-          "App PRI: $($pri.Name)"
-          $env:CONDUIT_NO_DIALOG = "1"
-          $env:CONDUIT_SMOKE = "1"
-          $log = Join-Path $env:LOCALAPPDATA "Conduit/crash.log"
-          Remove-Item $log -ErrorAction SilentlyContinue
-          $p = Start-Process "$dir/ConduitHost.exe" -PassThru
-          Start-Sleep -Seconds 25
-          if (Test-Path $log) { Get-Content $log; throw "ConduitHost wrote a crash log" }
-          if ($p.HasExited) { throw "ConduitHost exited after start (exit code $($p.ExitCode))" }
-          $p.Refresh()
-          "Window title: '$($p.MainWindowTitle)'"
-          $r = Invoke-WebRequest http://127.0.0.1:47821/v1/ping -UseBasicParsing
-          "Ping: $($r.Content)"
-          Stop-Process -Id $p.Id -Force
       - uses: actions/upload-artifact@v4
         with:
           name: ConduitHost-win-${{ matrix.arch }}
           path: out/ConduitHost-win-${{ matrix.arch }}.zip
           if-no-files-found: error
+
+  # Launch the final ZIP on real hardware for each architecture.
+  smoke:
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+          - arch: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ConduitHost-win-${{ matrix.arch }}
+          path: dist
+      - name: Launch test (${{ matrix.arch }})
+        shell: pwsh
+        run: windows/scripts/smoke-test.ps1 -Zip dist/ConduitHost-win-${{ matrix.arch }}.zip

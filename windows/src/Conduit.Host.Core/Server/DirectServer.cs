@@ -41,7 +41,7 @@ public sealed class DirectServer : IAsyncDisposable
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
 
         app.MapGet("/v1/ping", () => Results.Text(
-            new JsonObject { ["app"] = "conduit", ["v"] = 1, ["hostId"] = _host.Identity.HostId }.ToJsonString(), "application/json"));
+            new JsonObject { ["app"] = "conduit", ["v"] = 1, ["hostId"] = _host.Identity.HostId, ["pid"] = Environment.ProcessId }.ToJsonString(), "application/json"));
 
         app.Map("/v1/connect", async (HttpContext ctx) =>
         {
