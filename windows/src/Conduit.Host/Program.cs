@@ -13,7 +13,7 @@ public static class Program
         try
         {
             WinRT.ComWrappersSupport.InitializeComWrappers();
-            Application.Start(_ =>
+            Application.Start(_p =>
             {
                 try
                 {

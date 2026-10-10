@@ -1,5 +1,7 @@
 用 iPhone 在任何地方驾驭电脑上的编程 Agent —— Claude · Codex · Pi · opencode。
 
+**1.0.1**：修复 Windows 主机打开后无窗口、直接退出的问题（缺少编译后的 XAML 资源 `ConduitHost.pri`）。启动失败时会弹出错误提示，并写入 `%LOCALAPPDATA%\Conduit\crash.log`。CI 现在会实际启动 exe，确认窗口和端口正常后才发布。
+
 ## 下载
 
 | 文件 | 用途 |
