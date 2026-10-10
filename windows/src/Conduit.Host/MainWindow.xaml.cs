@@ -53,15 +53,20 @@ public sealed partial class MainWindow : Window
                 () => NavigateTo("pair"), () => NavigateTo("agents"), () => NavigateTo("sessions"),
                 () => Nav.SelectedItem = Nav.SettingsItem, () => NavigateTo("overview"),
             });
+            var marker = Environment.GetEnvironmentVariable("CONDUIT_SMOKE_MARKER");
+            var step = 0;
             var timer = DispatcherQueue.CreateTimer();
             timer.Interval = TimeSpan.FromSeconds(2);
             timer.Tick += (t, _) =>
             {
+                step++;
+                App.Runtime.Log($"Smoke tour step {step}");
+                if (marker is { Length: > 0 }) File.WriteAllText(marker + ".progress", $"step {step}");
                 if (tour.Count == 0)
                 {
                     t.Stop();
                     App.Runtime.Log("Smoke tour complete");
-                    if (Environment.GetEnvironmentVariable("CONDUIT_SMOKE_MARKER") is { Length: > 0 } marker)
+                    if (marker is { Length: > 0 })
                         File.WriteAllText(marker, $"ok pid={Environment.ProcessId}");
                     return;
                 }

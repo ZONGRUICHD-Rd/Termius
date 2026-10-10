@@ -26,6 +26,34 @@ public sealed class ApnsSettings
     public string PrivateKeyPem { get; set; } = "";
 }
 
+/// <summary>Cloudflare Tunnel: "quick" = free random *.trycloudflare.com URL; "token" = your own named tunnel + domain.</summary>
+public sealed class CloudflareSettings
+{
+    public bool Enabled { get; set; }
+    public string Mode { get; set; } = "quick";
+    /// <summary>Tunnel token from the Cloudflare dashboard (token mode).</summary>
+    public string Token { get; set; } = "";
+    /// <summary>Public hostname routed to http://localhost:47821 in the dashboard, e.g. conduit.example.com (token mode).</summary>
+    public string Hostname { get; set; } = "";
+    /// <summary>Optional explicit path to cloudflared(.exe); otherwise PATH, then an automatic download.</summary>
+    public string? CloudflaredPath { get; set; }
+}
+
+/// <summary>DDNS / port forwarding: a domain that resolves to this PC and a forwarded port.</summary>
+public sealed class DdnsSettings
+{
+    public bool Enabled { get; set; }
+    public string Domain { get; set; } = "";
+    public int Port { get; set; } = 47821;
+    /// <summary>Use wss:// (a TLS reverse proxy in front of the host).</summary>
+    public bool Tls { get; set; }
+
+    [JsonIgnore]
+    public string? Url => Enabled && !string.IsNullOrWhiteSpace(Domain)
+        ? $"{(Tls ? "wss" : "ws")}://{Domain.Trim().TrimEnd('/')}:{Port}"
+        : null;
+}
+
 public sealed class HostConfig
 {
     public string HostName { get; set; } = Environment.MachineName;
@@ -41,6 +69,10 @@ public sealed class HostConfig
     public Dictionary<string, string> AgentPaths { get; set; } = [];
     public List<string> RecentDirectories { get; set; } = [];
     public ApnsSettings Apns { get; set; } = new();
+    /// <summary>Allow direct connections on the local network (and Tailscale).</summary>
+    public bool LanEnabled { get; set; } = true;
+    public CloudflareSettings Cloudflare { get; set; } = new();
+    public DdnsSettings Ddns { get; set; } = new();
     public bool EnableEchoAgent { get; set; }
 
     public static HostConfig Load(string path)

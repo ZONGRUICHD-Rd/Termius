@@ -36,14 +36,19 @@ public sealed class PiAdapter : IAgentAdapter
 
     private string NextId() => $"c{Interlocked.Increment(ref _reqCounter)}";
 
-    public Task SendAsync(string text, CancellationToken ct)
+    public Task SendAsync(string text, IReadOnlyList<ImageInput> images, CancellationToken ct)
     {
         var cmd = new JsonObject { ["id"] = NextId(), ["type"] = "prompt", ["message"] = text };
+        if (images.Count > 0)
+            cmd["images"] = new JsonArray(images.Select(i => (JsonNode)new JsonObject { ["type"] = "image", ["data"] = i.Base64, ["mimeType"] = i.MimeType }).ToArray());
         if (_running) cmd["streamingBehavior"] = "steer";
         _proc!.Send(cmd);
-        _sink.Emit(Ev.Status(SessionStates.Running, "Thinking…"));
+        _sink.Emit(Ev.Status(SessionStates.Running, "思考中…"));
         return Task.CompletedTask;
     }
+
+    /// <summary>Pi picks its model at start-up (--model), so a model change restarts it on the same session id.</summary>
+    public Task<bool> UpdateOptionsAsync(string? model, string? mode, CancellationToken ct) => Task.FromResult(model is null);
 
     public Task InterruptAsync(CancellationToken ct)
     {
@@ -67,7 +72,7 @@ public sealed class PiAdapter : IAgentAdapter
         }
         _proc?.Send(resp);
         _sink.Emit(Ev.ApprovalDone(approvalId, decision));
-        if (_dialogs.IsEmpty && _running) _sink.Emit(Ev.Status(SessionStates.Running, "Continuing…"));
+        if (_dialogs.IsEmpty && _running) _sink.Emit(Ev.Status(SessionStates.Running, "继续执行…"));
         return Task.CompletedTask;
     }
 
@@ -78,7 +83,7 @@ public sealed class PiAdapter : IAgentAdapter
             case "response":
                 if ((bool?)m["success"] == false)
                 {
-                    var err = (string?)m["error"] ?? "Pi rejected the command";
+                    var err = (string?)m["error"] ?? "Pi 拒绝了该命令";
                     _sink.Emit(Ev.Error(err));
                     if (!_running) _sink.Emit(Ev.Status(SessionStates.Idle, Text.FirstLine(err)));
                 }
@@ -90,12 +95,12 @@ public sealed class PiAdapter : IAgentAdapter
 
             case "agent_start":
                 _running = true;
-                _sink.Emit(Ev.Status(SessionStates.Running, "Working…"));
+                _sink.Emit(Ev.Status(SessionStates.Running, "工作中…"));
                 break;
 
             case "agent_settled":
                 _running = false;
-                _sink.Emit(Ev.Status(SessionStates.Idle, "Done"));
+                _sink.Emit(Ev.Status(SessionStates.Idle, "已完成"));
                 break;
 
             case "message_start" when ((string?)m["message"]?["role"]) == "assistant":
@@ -145,11 +150,11 @@ public sealed class PiAdapter : IAgentAdapter
             }
 
             case "auto_retry_start":
-                _sink.Emit(Ev.Status(SessionStates.Running, $"Retrying ({m["attempt"]}/{m["maxAttempts"]})…"));
+                _sink.Emit(Ev.Status(SessionStates.Running, $"重试中（{m["attempt"]}/{m["maxAttempts"]}）…"));
                 break;
 
             case "compaction_start":
-                _sink.Emit(Ev.Status(SessionStates.Running, "Compacting context…"));
+                _sink.Emit(Ev.Status(SessionStates.Running, "正在压缩上下文…"));
                 break;
 
             case "extension_ui_request":
@@ -167,7 +172,7 @@ public sealed class PiAdapter : IAgentAdapter
             case "confirm":
             case "select":
                 _dialogs[id] = m;
-                var title = (string?)m["title"] ?? "Pi needs confirmation";
+                var title = (string?)m["title"] ?? "Pi 需要确认";
                 var detail = (string?)m["message"] ?? (m["options"] is JsonArray o ? string.Join(" / ", o.Select(x => x?.ToString())) : "");
                 _sink.Emit(Ev.Approval(id, title, detail, "tool", canAlways: false));
                 _sink.Emit(Ev.Status(SessionStates.Waiting, title));

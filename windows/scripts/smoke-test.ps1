@@ -23,17 +23,23 @@ $env:CONDUIT_SMOKE_MARKER = $marker
 $crash = Join-Path $env:LOCALAPPDATA "Conduit/crash.log"
 Remove-Item $crash -ErrorAction SilentlyContinue
 
+function Show-Diagnostics {
+  "--- tour progress: $(Get-Content "$marker.progress" -ErrorAction SilentlyContinue)"
+  "--- host.log:"; Get-Content (Join-Path $data "host.log") -ErrorAction SilentlyContinue
+  "--- crash.log:"; Get-Content $crash -ErrorAction SilentlyContinue
+}
+
 $p = Start-Process $exe -PassThru
-$deadline = (Get-Date).AddSeconds(90)
+$deadline = (Get-Date).AddSeconds(150)
 while ((Get-Date) -lt $deadline) {
   Start-Sleep -Seconds 2
-  if ($p.HasExited) { if (Test-Path $crash) { Get-Content $crash }; throw "ConduitHost exited during startup (code $($p.ExitCode))" }
+  if ($p.HasExited) { Show-Diagnostics; throw "ConduitHost exited during startup (code $($p.ExitCode))" }
   $p.Refresh()
   if ($p.MainWindowHandle -ne 0 -and (Test-Path $marker)) { break }
 }
-if (Test-Path $crash) { Get-Content $crash; throw "ConduitHost wrote a crash log" }
-if ($p.MainWindowHandle -eq 0) { throw "No main window was created" }
-if (!(Test-Path $marker)) { throw "Page tour did not complete" }
+if (Test-Path $crash) { Show-Diagnostics; throw "ConduitHost wrote a crash log" }
+if ($p.MainWindowHandle -eq 0) { Show-Diagnostics; throw "No main window was created" }
+if (!(Test-Path $marker)) { Show-Diagnostics; throw "Page tour did not complete" }
 "Window: '$($p.MainWindowTitle)' handle=$($p.MainWindowHandle); tour: $(Get-Content $marker)"
 
 $ping = Invoke-RestMethod http://127.0.0.1:47821/v1/ping

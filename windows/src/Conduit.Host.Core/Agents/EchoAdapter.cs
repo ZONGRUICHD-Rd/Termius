@@ -24,7 +24,9 @@ public sealed class EchoAdapter : IAgentAdapter
         return Task.CompletedTask;
     }
 
-    public Task SendAsync(string text, CancellationToken ct)
+    public Task<bool> UpdateOptionsAsync(string? model, string? mode, CancellationToken ct) => Task.FromResult(true);
+
+    public Task SendAsync(string text, IReadOnlyList<ImageInput> images, CancellationToken ct)
     {
         _turn?.Cancel();
         _turn = new CancellationTokenSource();

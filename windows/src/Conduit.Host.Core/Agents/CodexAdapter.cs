@@ -14,6 +14,7 @@ public sealed class CodexAdapter : IAgentAdapter
     private IAgentSink _sink = null!;
     private string _cwd = "";
     private string? _model;
+    private string? _mode;
     private string? _threadId;
     private string? _turnId;
     private long _nextId;
@@ -25,6 +26,7 @@ public sealed class CodexAdapter : IAgentAdapter
         _sink = sink;
         _cwd = o.WorkingDirectory;
         _model = o.Model;
+        _mode = o.Mode;
         _proc = JsonlProcess.Start(o.ExecutablePath, ["app-server"], o.WorkingDirectory);
         _proc.Message += OnMessage;
         _proc.Exited += code =>
@@ -43,7 +45,7 @@ public sealed class CodexAdapter : IAgentAdapter
         if (!string.IsNullOrEmpty(o.ResumeToken))
         {
             try { result = await RequestAsync("thread/resume", new JsonObject { ["threadId"] = o.ResumeToken, ["cwd"] = _cwd }, ct); }
-            catch (AgentRpcException) { _sink.Emit(Ev.Notice("Could not resume the previous Codex thread — started a new one.")); }
+            catch (AgentRpcException) { _sink.Emit(Ev.Notice("无法恢复之前的 Codex 对话，已开始新的对话。")); }
         }
         if (result is null)
         {
@@ -69,10 +71,40 @@ public sealed class CodexAdapter : IAgentAdapter
         finally { _pending.TryRemove(id, out var _); }
     }
 
-    public async Task SendAsync(string text, CancellationToken ct)
+    /// <summary>Codex autonomy presets → approvalPolicy + sandboxPolicy for each turn.</summary>
+    public static readonly AgentMode[] Modes =
+    [
+        new("default", "默认", "使用电脑上 Codex 的配置"),
+        new("readonly", "只读", "只能读取和回答，任何修改都需要批准"),
+        new("auto", "自动", "可在项目内修改文件并运行命令，越界时询问"),
+        new("full", "完全访问", "不询问、不限制（谨慎使用）"),
+    ];
+
+    private void ApplyTurnOptions(JsonObject p)
+    {
+        if (!string.IsNullOrEmpty(_model)) p["model"] = _model;
+        switch (_mode)
+        {
+            case "readonly":
+                p["approvalPolicy"] = "unlessTrusted";
+                p["sandboxPolicy"] = new JsonObject { ["type"] = "readOnly" };
+                break;
+            case "auto":
+                p["approvalPolicy"] = "onRequest";
+                p["sandboxPolicy"] = new JsonObject { ["type"] = "workspaceWrite", ["writableRoots"] = new JsonArray(_cwd), ["networkAccess"] = true };
+                break;
+            case "full":
+                p["approvalPolicy"] = "never";
+                p["sandboxPolicy"] = new JsonObject { ["type"] = "dangerFullAccess" };
+                break;
+        }
+    }
+
+    public async Task SendAsync(string text, IReadOnlyList<ImageInput> images, CancellationToken ct)
     {
         var input = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text });
-        _sink.Emit(Ev.Status(SessionStates.Running, "Thinking…"));
+        foreach (var img in images) input.Add(new JsonObject { ["type"] = "localImage", ["path"] = img.SaveToTemp() });
+        _sink.Emit(Ev.Status(SessionStates.Running, "思考中…"));
         if (_turnId is not null)
         {
             try
@@ -82,8 +114,17 @@ public sealed class CodexAdapter : IAgentAdapter
             }
             catch (AgentRpcException) { /* turn already ended: fall through to a new turn */ }
         }
-        var res = await RequestAsync("turn/start", new JsonObject { ["threadId"] = _threadId, ["input"] = input, ["cwd"] = _cwd }, ct);
+        var p = new JsonObject { ["threadId"] = _threadId, ["input"] = input.DeepClone(), ["cwd"] = _cwd };
+        ApplyTurnOptions(p);
+        var res = await RequestAsync("turn/start", p, ct);
         _turnId ??= (string?)res?["turn"]?["id"];
+    }
+
+    public Task<bool> UpdateOptionsAsync(string? model, string? mode, CancellationToken ct)
+    {
+        if (model is not null) _model = model.Length == 0 ? null : model;
+        if (mode is not null) _mode = mode;
+        return Task.FromResult(true); // applied on the next turn
     }
 
     public async Task InterruptAsync(CancellationToken ct)
@@ -120,7 +161,7 @@ public sealed class CodexAdapter : IAgentAdapter
         }
         _proc?.Send(new JsonObject { ["id"] = a.Id.DeepClone(), ["result"] = result });
         _sink.Emit(Ev.ApprovalDone(approvalId, decision));
-        if (_approvals.IsEmpty) _sink.Emit(Ev.Status(SessionStates.Running, "Continuing…"));
+        if (_approvals.IsEmpty) _sink.Emit(Ev.Status(SessionStates.Running, "继续执行…"));
         return Task.CompletedTask;
     }
 
@@ -151,7 +192,7 @@ public sealed class CodexAdapter : IAgentAdapter
         {
             case "turn/started":
                 _turnId = (string?)p["turn"]?["id"] ?? _turnId;
-                _sink.Emit(Ev.Status(SessionStates.Running, "Working…"));
+                _sink.Emit(Ev.Status(SessionStates.Running, "工作中…"));
                 break;
 
             case "turn/completed":
@@ -160,15 +201,15 @@ public sealed class CodexAdapter : IAgentAdapter
                 switch ((string?)turn?["status"])
                 {
                     case "failed":
-                        var msg = (string?)turn?["error"]?["message"] ?? "Turn failed";
+                        var msg = (string?)turn?["error"]?["message"] ?? "本轮执行失败";
                         _sink.Emit(Ev.Error(msg));
                         _sink.Emit(Ev.Status(SessionStates.Error, Text.FirstLine(msg)));
                         break;
                     case "interrupted":
-                        _sink.Emit(Ev.Status(SessionStates.Idle, "Interrupted"));
+                        _sink.Emit(Ev.Status(SessionStates.Idle, "已中断"));
                         break;
                     default:
-                        _sink.Emit(Ev.Status(SessionStates.Idle, "Done"));
+                        _sink.Emit(Ev.Status(SessionStates.Idle, "已完成"));
                         break;
                 }
                 break;
@@ -249,7 +290,7 @@ public sealed class CodexAdapter : IAgentAdapter
                 break;
 
             case "contextCompaction":
-                if (completed) _sink.Emit(Ev.Notice("Context compacted"));
+                if (completed) _sink.Emit(Ev.Notice("上下文已压缩"));
                 break;
         }
     }
@@ -275,21 +316,21 @@ public sealed class CodexAdapter : IAgentAdapter
                 var detail = string.Join("\n", new[] { cmd, (string?)p["reason"], p["cwd"] is null ? null : $"in {p["cwd"]}" }.Where(x => !string.IsNullOrEmpty(x)));
                 _approvals[aid] = (id.DeepClone(), method, p);
                 _sink.Emit(Ev.Approval(aid, title, detail, host is not null ? "network" : "command"));
-                _sink.Emit(Ev.Status(SessionStates.Waiting, "Needs approval: " + title));
+                _sink.Emit(Ev.Status(SessionStates.Waiting, "需要批准：" + title));
                 break;
             }
             case "item/fileChange/requestApproval":
             {
                 _approvals[aid] = (id.DeepClone(), method, p);
-                _sink.Emit(Ev.Approval(aid, "Apply file changes", (string?)p["reason"] ?? "Codex wants to modify files in the workspace.", "edit"));
-                _sink.Emit(Ev.Status(SessionStates.Waiting, "Needs approval: file changes"));
+                _sink.Emit(Ev.Approval(aid, "应用文件修改", (string?)p["reason"] ?? "Codex 想要修改工作区中的文件。", "edit"));
+                _sink.Emit(Ev.Status(SessionStates.Waiting, "需要批准：修改文件"));
                 break;
             }
             case "item/permissions/requestApproval":
             {
                 _approvals[aid] = (id.DeepClone(), method, p);
-                _sink.Emit(Ev.Approval(aid, "Grant extra permissions", (string?)p["reason"] ?? p["permissions"]?.ToJsonString() ?? "", "permissions"));
-                _sink.Emit(Ev.Status(SessionStates.Waiting, "Needs approval: permissions"));
+                _sink.Emit(Ev.Approval(aid, "授予额外权限", (string?)p["reason"] ?? p["permissions"]?.ToJsonString() ?? "", "permissions"));
+                _sink.Emit(Ev.Status(SessionStates.Waiting, "需要批准：额外权限"));
                 break;
             }
             default:

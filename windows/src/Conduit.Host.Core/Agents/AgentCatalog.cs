@@ -34,7 +34,7 @@ public sealed class AgentCatalog
             Path.Combine(appData, "Claude", "claude-code", "*", "claude.exe"),
             Path.Combine(local, "AnthropicClaude", "claude-code", "*", "claude.exe"),
             Path.Combine(home, ".local", "bin", "claude"),
-        ], () => new ClaudeAdapter(), "Claude Desktop / Claude Code engine (stream-json)");
+        ], () => new ClaudeAdapter(), "Claude Desktop / Claude Code 引擎");
 
         yield return new Spec(Codex, "Codex", "OpenAI", "codex",
         [
@@ -43,13 +43,13 @@ public sealed class AgentCatalog
             Path.Combine(local, "Programs", "codex", "resources", "bin", "codex.exe"),
             Path.Combine(home, ".codex", "bin", "codex.exe"),
             Path.Combine(home, ".local", "bin", "codex"),
-        ], () => new CodexAdapter(), "Codex Desktop / CLI (app-server JSON-RPC)");
+        ], () => new CodexAdapter(), "Codex Desktop / CLI（app-server）");
 
         yield return new Spec(Pi, "Pi", "pi.dev", "pi",
         [
             Path.Combine(appData, "npm", "pi.cmd"),
             Path.Combine(home, ".local", "bin", "pi"),
-        ], () => new PiAdapter(), "Pi Coding Agent (RPC mode)");
+        ], () => new PiAdapter(), "Pi Coding Agent（RPC 模式）");
 
         yield return new Spec(Opencode, "opencode", "SST", "opencode",
         [
@@ -57,8 +57,23 @@ public sealed class AgentCatalog
             Path.Combine(appData, "npm", "opencode.cmd"),
             Path.Combine(home, "scoop", "shims", "opencode.exe"),
             Path.Combine(home, ".opencode", "bin", "opencode"),
-        ], () => new OpencodeAdapter(), "opencode (headless server + SSE)");
+        ], () => new OpencodeAdapter(), "opencode（无界面服务器）");
     }
+
+    public static IReadOnlyList<AgentMode> ModesFor(string id) => id switch
+    {
+        Claude => ClaudeAdapter.Modes,
+        Codex => CodexAdapter.Modes,
+        Opencode => OpencodeAdapter.Modes,
+        _ => [],
+    };
+
+    /// <summary>Suggestions shown in the phone's model picker; any other id can be typed in.</summary>
+    public static IReadOnlyList<string> ModelsFor(string id) => id switch
+    {
+        Claude => ["opus", "sonnet", "haiku"],
+        _ => [],
+    };
 
     public IReadOnlyList<AgentInfo> List()
     {
@@ -66,7 +81,7 @@ public sealed class AgentCatalog
         {
             var list = Specs().Select(s => _cache.TryGetValue(s.Id, out var c) ? c : Probe(s, withVersion: false)).ToList();
             if (_config.EnableEchoAgent)
-                list.Add(new AgentInfo(Echo, "Demo agent", "Conduit", true, null, HostInfo.Version, "Scripted agent for trying the app"));
+                list.Add(new AgentInfo(Echo, "演示 Agent", "Conduit", true, null, HostInfo.Version, "无需安装即可体验的脚本化 Agent", [], []));
             return list;
         }
     }
@@ -88,7 +103,7 @@ public sealed class AgentCatalog
         string? version = null;
         if (path is not null && withVersion) version = ReadVersion(path);
         return new AgentInfo(s.Id, s.Name, s.Vendor, path is not null, path, version,
-            path is null ? $"Not found — install it or set its path in Agents" : s.Detail);
+            path is null ? "未找到——请安装，或在“Agent”页指定路径" : s.Detail, ModesFor(s.Id), ModelsFor(s.Id));
     }
 
     private string? Resolve(Spec s)
@@ -150,8 +165,8 @@ public sealed class AgentCatalog
     public (IAgentAdapter Adapter, string Path) Create(string agentId)
     {
         if (agentId == Echo && _config.EnableEchoAgent) return (new EchoAdapter(), "");
-        var spec = Specs().FirstOrDefault(s => s.Id == agentId) ?? throw new ArgumentException($"Unknown agent '{agentId}'");
-        var path = Resolve(spec) ?? throw new InvalidOperationException($"{spec.Name} is not installed on this computer.");
+        var spec = Specs().FirstOrDefault(s => s.Id == agentId) ?? throw new ArgumentException($"未知的 Agent：{agentId}");
+        var path = Resolve(spec) ?? throw new InvalidOperationException($"这台电脑上没有安装 {spec.Name}。");
         return (spec.Factory(), path);
     }
 }

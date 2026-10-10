@@ -42,7 +42,12 @@ public static class Ev
 
     public static string Kind(JsonObject ev) => (string?)ev["k"] ?? "";
 
-    public static JsonObject User(string text) => new() { ["k"] = KUser, ["text"] = text };
+    public static JsonObject User(string text, int images = 0)
+    {
+        var ev = new JsonObject { ["k"] = KUser, ["text"] = text };
+        if (images > 0) ev["images"] = images;
+        return ev;
+    }
 
     /// <summary>Streaming assistant text, appended to message <paramref name="mid"/>.</summary>
     public static JsonObject Delta(string mid, string text) => new() { ["k"] = KDelta, ["mid"] = mid, ["text"] = text };

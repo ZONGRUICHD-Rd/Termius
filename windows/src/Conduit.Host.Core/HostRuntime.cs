@@ -7,6 +7,7 @@ using Conduit.Host.Core.Push;
 using Conduit.Host.Core.Relay;
 using Conduit.Host.Core.Security;
 using Conduit.Host.Core.Server;
+using Conduit.Host.Core.Tunnel;
 using Conduit.Host.Core.Sessions;
 
 namespace Conduit.Host.Core;
@@ -25,6 +26,7 @@ public sealed class HostRuntime : IAsyncDisposable
     private readonly ConcurrentDictionary<string, ClientConnection> _connections = new();
     private readonly ConcurrentQueue<string> _log = new();
     private RelayClient? _relay;
+    private CloudflareTunnel? _tunnel;
     private DirectServer? _direct;
 
     public string DataDirectory { get; }
@@ -86,6 +88,7 @@ public sealed class HostRuntime : IAsyncDisposable
         _direct = new DirectServer(this);
         await _direct.StartAsync(Config.Port, ct);
         RestartRelay();
+        RestartTunnel();
         _ = Agents.RefreshAsync().ContinueWith(_ => Changed?.Invoke(), TaskScheduler.Default);
         Changed?.Invoke();
     }
@@ -94,6 +97,54 @@ public sealed class HostRuntime : IAsyncDisposable
     public string? DirectError => _direct?.Error;
     public string RelayStatus => _relay is null ? "disabled" : _relay.Status;
     public string? RelayError => _relay?.LastError;
+
+    public string TunnelStatus => _tunnel is null ? "disabled" : _tunnel.Status;
+    public string? TunnelError => _tunnel?.Error;
+    public string? TunnelUrl => _tunnel?.PublicUrl;
+
+    public void RestartTunnel()
+    {
+        var old = _tunnel;
+        _tunnel = null;
+        if (old is not null) _ = old.DisposeAsync().AsTask();
+        if (Config.Cloudflare.Enabled)
+        {
+            _tunnel = new CloudflareTunnel(this, Config.Cloudflare, Config.Port);
+            _tunnel.Changed += () => Changed?.Invoke();
+            _tunnel.Start();
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>Applies connection settings sent from the desktop UI or the phone, restarting what changed.</summary>
+    public void ApplyConnectionSettings(JsonObject p)
+    {
+        var restartTunnel = false;
+        Update(c =>
+        {
+            if ((bool?)p["lan"] is { } lan) c.LanEnabled = lan;
+            if (p["cloudflare"] is JsonObject cf)
+            {
+                var before = (c.Cloudflare.Enabled, c.Cloudflare.Mode, c.Cloudflare.Token, c.Cloudflare.Hostname);
+                if ((bool?)cf["enabled"] is { } en) c.Cloudflare.Enabled = en;
+                if ((string?)cf["mode"] is "quick" or "token") c.Cloudflare.Mode = (string)cf["mode"]!;
+                if ((string?)cf["token"] is { } token) c.Cloudflare.Token = token.Trim();
+                if ((string?)cf["hostname"] is { } hn) c.Cloudflare.Hostname = hn.Trim();
+                restartTunnel = before != (c.Cloudflare.Enabled, c.Cloudflare.Mode, c.Cloudflare.Token, c.Cloudflare.Hostname);
+            }
+            if (p["ddns"] is JsonObject d)
+            {
+                if ((bool?)d["enabled"] is { } en) c.Ddns.Enabled = en;
+                if ((string?)d["domain"] is { } dom) c.Ddns.Domain = dom.Trim().Replace("http://", "").Replace("https://", "").TrimEnd('/');
+                if ((int?)d["port"] is { } port and > 0 and < 65536) c.Ddns.Port = port;
+                if ((bool?)d["tls"] is { } tls) c.Ddns.Tls = tls;
+            }
+            if (p["relay"] is JsonValue r) c.RelayUrl = string.IsNullOrWhiteSpace((string?)r) ? null : (string?)r;
+        });
+        if (restartTunnel) RestartTunnel();
+        if (p["relay"] is not null) RestartRelay();
+        Log("连接设置已更新");
+    }
 
     public void RestartRelay()
     {
@@ -191,7 +242,22 @@ public sealed class HostRuntime : IAsyncDisposable
         d.BundleId = bundleId;
     });
 
-    public List<EndpointInfo> Endpoints() => NetworkEndpoints.Discover(Config.Port, Config.ExtraEndpoints);
+    /// <summary>
+    /// Every route a phone may use, by kind: lan / tailscale (direct), ddns, cloudflare, custom.
+    /// The relay is advertised separately. Phones let the user pick one or race them all ("auto").
+    /// </summary>
+    public List<EndpointInfo> Endpoints()
+    {
+        var list = Config.LanEnabled
+            ? NetworkEndpoints.Discover(Config.Port, Config.ExtraEndpoints)
+            : Config.ExtraEndpoints.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e => new EndpointInfo(e.Trim(), "custom", "configured")).ToList();
+        if (Config.Ddns.Url is { } ddns) list.Insert(0, new EndpointInfo(ddns, "ddns", "DDNS"));
+        if (_tunnel?.WebSocketUrl is { } cf) list.Insert(0, new EndpointInfo(cf, "cloudflare", "Cloudflare Tunnel"));
+        return list.DistinctBy(e => e.Url).ToList();
+    }
+
+    private static JsonArray Routes(IEnumerable<EndpointInfo> endpoints) =>
+        new(endpoints.Select(e => (JsonNode)new JsonObject { ["url"] = e.Url, ["kind"] = e.Kind }).ToArray());
 
     /// <summary>conduit://pair?d=… — the QR code content. Contains no secret besides the one-time pairing token.</summary>
     public string PairingLink()
@@ -204,6 +270,7 @@ public sealed class HostRuntime : IAsyncDisposable
             ["k"] = B64.Std(Identity.KeyAgreementPublic),
             ["t"] = Config.PairingToken,
             ["e"] = new JsonArray(Endpoints().Select(e => (JsonNode)JsonValue.Create(e.Url)!).ToArray()),
+            ["ek"] = new JsonArray(Endpoints().Select(e => (JsonNode)JsonValue.Create(e.Kind)!).ToArray()),
         };
         if (!string.IsNullOrWhiteSpace(Config.RelayUrl)) payload["r"] = Config.RelayUrl;
         return "conduit://pair?d=" + B64.Url(Encoding.UTF8.GetBytes(payload.ToJsonString()));
@@ -219,6 +286,9 @@ public sealed class HostRuntime : IAsyncDisposable
             ["available"] = a.Available,
             ["version"] = a.Version,
             ["detail"] = a.Detail,
+            ["history"] = History.Supports(a.Id),
+            ["modes"] = new JsonArray((a.Modes ?? []).Select(m => (JsonNode)new JsonObject { ["id"] = m.Id, ["label"] = m.Label, ["description"] = m.Description }).ToArray()),
+            ["models"] = new JsonArray((a.Models ?? []).Select(m => (JsonNode)JsonValue.Create(m)!).ToArray()),
         }).ToArray());
         return new JsonObject
         {
@@ -228,6 +298,10 @@ public sealed class HostRuntime : IAsyncDisposable
             ["os"] = RuntimeInformation.OSDescription,
             ["agents"] = agents,
             ["endpoints"] = new JsonArray(Endpoints().Select(e => (JsonNode)JsonValue.Create(e.Url)!).ToArray()),
+            ["routes"] = Routes(Endpoints()),
+            ["lan"] = Config.LanEnabled,
+            ["cloudflare"] = new JsonObject { ["enabled"] = Config.Cloudflare.Enabled, ["mode"] = Config.Cloudflare.Mode, ["status"] = TunnelStatus, ["url"] = TunnelUrl },
+            ["ddns"] = new JsonObject { ["enabled"] = Config.Ddns.Enabled, ["domain"] = Config.Ddns.Domain, ["port"] = Config.Ddns.Port, ["tls"] = Config.Ddns.Tls },
             ["relay"] = Config.RelayUrl,
             ["apns"] = Config.Apns.Enabled,
         };
@@ -265,14 +339,34 @@ public sealed class HostRuntime : IAsyncDisposable
     {
         var line = $"{DateTime.Now:HH:mm:ss}  {message}";
         _log.Enqueue(line);
+        AppendLogFile(line);
         while (_log.Count > 300) _log.TryDequeue(out _);
         LogAdded?.Invoke(line);
+    }
+
+    private readonly object _logFileLock = new();
+
+    /// <summary>host.log in the data folder (rotated at 1 MB) — attach it when reporting problems.</summary>
+    private void AppendLogFile(string line)
+    {
+        try
+        {
+            lock (_logFileLock)
+            {
+                var path = Path.Combine(DataDirectory, "host.log");
+                if (File.Exists(path) && new FileInfo(path).Length > 1_000_000) File.Move(path, path + ".1", overwrite: true);
+                File.AppendAllText(path, $"{DateTime.Now:yyyy-MM-dd} {line}{Environment.NewLine}");
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     public async ValueTask DisposeAsync()
     {
         foreach (var c in _connections.Values) c.Close();
         if (_relay is not null) await _relay.DisposeAsync();
+        if (_tunnel is not null) await _tunnel.DisposeAsync();
         if (_direct is not null) await _direct.DisposeAsync();
         Pusher.Dispose();
         await Sessions.DisposeAsync();

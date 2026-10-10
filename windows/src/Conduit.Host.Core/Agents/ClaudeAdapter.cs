@@ -37,6 +37,7 @@ public sealed class ClaudeAdapter : IAgentAdapter
         };
         if (!string.IsNullOrEmpty(o.ResumeToken)) { args.Add("--resume"); args.Add(o.ResumeToken); }
         if (!string.IsNullOrEmpty(o.Model)) { args.Add("--model"); args.Add(o.Model); }
+        if (IsMode(o.Mode)) { args.Add("--permission-mode"); args.Add(o.Mode!); }
 
         _proc = JsonlProcess.Start(o.ExecutablePath, args, o.WorkingDirectory, new Dictionary<string, string>
         {
@@ -56,21 +57,62 @@ public sealed class ClaudeAdapter : IAgentAdapter
 
     private string NextRequestId() => $"conduit_{Interlocked.Increment(ref _requestCounter)}";
 
-    public Task SendAsync(string text, CancellationToken ct)
+    /// <summary>Claude Code permission modes (CLI --permission-mode / control_request set_permission_mode).</summary>
+    public static readonly AgentMode[] Modes =
+    [
+        new("default", "默认", "修改文件和运行命令前先征求同意"),
+        new("acceptEdits", "自动接受编辑", "自动批准文件修改，命令仍需同意"),
+        new("plan", "计划模式", "只读分析并给出计划，不做修改"),
+        new("bypassPermissions", "完全自主", "跳过所有确认（谨慎使用）"),
+    ];
+
+    private static bool IsMode(string? m) => m is "acceptEdits" or "plan" or "bypassPermissions" or "default";
+
+    public Task SendAsync(string text, IReadOnlyList<ImageInput> images, CancellationToken ct)
     {
+        var content = new JsonArray();
+        foreach (var img in images)
+        {
+            content.Add(new JsonObject
+            {
+                ["type"] = "image",
+                ["source"] = new JsonObject { ["type"] = "base64", ["media_type"] = img.MimeType, ["data"] = img.Base64 },
+            });
+        }
+        content.Add(new JsonObject { ["type"] = "text", ["text"] = text });
         _proc!.Send(new JsonObject
         {
             ["type"] = "user",
-            ["message"] = new JsonObject
-            {
-                ["role"] = "user",
-                ["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text }),
-            },
+            ["message"] = new JsonObject { ["role"] = "user", ["content"] = content },
             ["parent_tool_use_id"] = null,
             ["session_id"] = _sessionId ?? "default",
         });
-        _sink.Emit(Ev.Status(SessionStates.Running, "Thinking…"));
+        _sink.Emit(Ev.Status(SessionStates.Running, "思考中…"));
         return Task.CompletedTask;
+    }
+
+    public Task<bool> UpdateOptionsAsync(string? model, string? mode, CancellationToken ct)
+    {
+        if (_proc is null) return Task.FromResult(false);
+        if (IsMode(mode))
+        {
+            _proc.Send(new JsonObject
+            {
+                ["type"] = "control_request",
+                ["request_id"] = NextRequestId(),
+                ["request"] = new JsonObject { ["subtype"] = "set_permission_mode", ["mode"] = mode },
+            });
+        }
+        if (model is not null)
+        {
+            _proc.Send(new JsonObject
+            {
+                ["type"] = "control_request",
+                ["request_id"] = NextRequestId(),
+                ["request"] = new JsonObject { ["subtype"] = "set_model", ["model"] = model.Length == 0 ? null : model },
+            });
+        }
+        return Task.FromResult(true);
     }
 
     public Task InterruptAsync(CancellationToken ct)
@@ -92,7 +134,7 @@ public sealed class ClaudeAdapter : IAgentAdapter
             _alwaysAllow.Add(tool);
         SendPermission(approvalId, req, allow);
         _sink.Emit(Ev.ApprovalDone(approvalId, decision));
-        if (_pendingPermissions.IsEmpty) _sink.Emit(Ev.Status(SessionStates.Running, allow ? "Continuing…" : "Denied"));
+        if (_pendingPermissions.IsEmpty) _sink.Emit(Ev.Status(SessionStates.Running, allow ? "继续执行…" : "已拒绝"));
         return Task.CompletedTask;
     }
 
@@ -100,7 +142,7 @@ public sealed class ClaudeAdapter : IAgentAdapter
     {
         JsonObject response = allow
             ? new JsonObject { ["behavior"] = "allow", ["updatedInput"] = req["input"]?.DeepClone() ?? new JsonObject() }
-            : new JsonObject { ["behavior"] = "deny", ["message"] = "The user denied this action from Conduit." };
+            : new JsonObject { ["behavior"] = "deny", ["message"] = "用户在 Conduit 中拒绝了此操作。" };
         _proc?.Send(new JsonObject
         {
             ["type"] = "control_response",
@@ -143,13 +185,13 @@ public sealed class ClaudeAdapter : IAgentAdapter
                 var isError = (bool?)m["is_error"] == true || ((string?)m["subtype"])?.StartsWith("error") == true;
                 if (isError)
                 {
-                    var err = (string?)m["result"] ?? (string?)m["subtype"] ?? "Claude reported an error";
+                    var err = (string?)m["result"] ?? (string?)m["subtype"] ?? "Claude 返回了错误";
                     _sink.Emit(Ev.Error(err));
                     _sink.Emit(Ev.Status(SessionStates.Error, Text.FirstLine(err)));
                 }
                 else
                 {
-                    _sink.Emit(Ev.Status(SessionStates.Idle, "Done"));
+                    _sink.Emit(Ev.Status(SessionStates.Idle, "已完成"));
                 }
                 break;
 
@@ -259,7 +301,7 @@ public sealed class ClaudeAdapter : IAgentAdapter
         _pendingPermissions[requestId] = req;
         var title = ToolTitles.For(tool, req["input"]);
         _sink.Emit(Ev.Approval(requestId, title, ToolTitles.InputPreview(req["input"]), KindFor(tool)));
-        _sink.Emit(Ev.Status(SessionStates.Waiting, "Needs approval: " + title));
+        _sink.Emit(Ev.Status(SessionStates.Waiting, "需要批准：" + title));
     }
 
     private static string KindFor(string tool) => tool.ToLowerInvariant() switch

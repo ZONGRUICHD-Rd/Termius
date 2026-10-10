@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Conduit.Host.Core.Agents;
+using Conduit.Host.Core.Git;
 using Conduit.Host.Core.Protocol;
 
 namespace Conduit.Host.Core.Sessions;
@@ -30,6 +31,7 @@ public sealed class SessionManager : IAsyncDisposable
         _dir = Path.Combine(dataDirectory, "sessions");
         Directory.CreateDirectory(_dir);
         LoadAll();
+        foreach (var loaded in _sessions.Values) ScheduleGitRefresh(loaded);
         _metaTimer = new Timer(_ => SaveDirtyMeta(), null, 2000, 2000);
         _persistLoop = Task.Run(PersistLoop);
     }
@@ -41,17 +43,18 @@ public sealed class SessionManager : IAsyncDisposable
     public JsonArray Summaries() =>
         new(_sessions.Values.Select(s => s.Summary()).OrderByDescending(s => (long?)s["updatedAt"]).Select(s => (JsonNode)s).ToArray());
 
-    public async Task<Session> CreateAsync(string agentId, string cwd, string? title, string? model, CancellationToken ct)
+    public async Task<Session> CreateAsync(string agentId, string cwd, string? title, string? model, string? mode, CancellationToken ct)
     {
-        if (!Directory.Exists(cwd)) throw new DirectoryNotFoundException($"Folder not found: {cwd}");
+        if (!Directory.Exists(cwd)) throw new DirectoryNotFoundException($"文件夹不存在：{cwd}");
         var now = Session.Now();
         var meta = new SessionMeta
         {
             Id = Guid.NewGuid().ToString("n")[..16],
             Agent = agentId,
             Cwd = cwd,
-            Model = model,
-            Title = string.IsNullOrWhiteSpace(title) ? $"New {agentId} session" : title!,
+            Model = string.IsNullOrWhiteSpace(model) ? null : model,
+            Mode = string.IsNullOrWhiteSpace(mode) ? null : mode,
+            Title = string.IsNullOrWhiteSpace(title) ? "新对话" : title!,
             TitleFromPrompt = string.IsNullOrWhiteSpace(title),
             CreatedAt = now,
             UpdatedAt = now,
@@ -72,7 +75,12 @@ public sealed class SessionManager : IAsyncDisposable
             if (!transient) _persist.Writer.TryWrite((sess.Meta.Id, e.ToJson().ToJsonString()));
             SessionEvent?.Invoke(sess.Meta.Id, e);
         };
-        s.SummaryChanged += sess => SummaryChanged?.Invoke(sess.Summary());
+        s.SummaryChanged += sess =>
+        {
+            var summary = sess.Summary();
+            SummaryChanged?.Invoke(summary);
+            if (!SessionStates.IsActive((string?)summary["state"] ?? "")) ScheduleGitRefresh(sess);
+        };
         _sessions[s.Meta.Id] = s;
         return s;
     }
@@ -92,12 +100,12 @@ public sealed class SessionManager : IAsyncDisposable
                 s.Adapter = null;
             }
             s.Disposing = false;
-            s.Emit(Ev.Status(SessionStates.Starting, "Starting agent…"));
+            s.Emit(Ev.Status(SessionStates.Starting, "正在启动 Agent…"));
             try
             {
                 var (adapter, path) = _catalog.Create(s.Meta.Agent);
                 s.Adapter = adapter;
-                await adapter.StartAsync(new AgentStartOptions(s.Meta.Id, s.Meta.Cwd, path, s.Meta.ResumeToken, s.Meta.Model), s, ct);
+                await adapter.StartAsync(new AgentStartOptions(s.Meta.Id, s.Meta.Cwd, path, s.Meta.ResumeToken, s.Meta.Model, s.Meta.Mode), s, ct);
             }
             catch (Exception ex)
             {
@@ -118,36 +126,102 @@ public sealed class SessionManager : IAsyncDisposable
         }
     }
 
-    public async Task SendAsync(string id, string text, CancellationToken ct)
+    public async Task SendAsync(string id, string text, IReadOnlyList<ImageInput> images, CancellationToken ct)
     {
-        var s = Get(id) ?? throw new KeyNotFoundException("Session not found");
-        s.Emit(Ev.User(text));
+        var s = Get(id) ?? throw new KeyNotFoundException("会话不存在");
+        s.Emit(Ev.User(text, images.Count));
         await EnsureStartedAsync(s, ct);
-        await s.Adapter!.SendAsync(text, ct);
+        await s.Adapter!.SendAsync(text, images, ct);
+    }
+
+    /// <summary>Switch model and/or permission mode. Applied live where the agent supports it, else on restart.</summary>
+    public async Task SetOptionsAsync(string id, string? model, string? mode, CancellationToken ct)
+    {
+        var s = Get(id) ?? throw new KeyNotFoundException("会话不存在");
+        if (model is not null) s.Meta.Model = model.Length == 0 ? null : model;
+        if (mode is not null) s.Meta.Mode = mode.Length == 0 ? null : mode;
+        s.Dirty = true;
+        if (s.Adapter is not null && !await s.Adapter.UpdateOptionsAsync(model, mode, ct) && !SessionStates.IsActive(s.State))
+        {
+            await StopAsync(id);
+            await EnsureStartedAsync(s, ct);
+        }
+        s.Emit(Ev.Notice(DescribeOptions(s.Meta)));
+    }
+
+    private string DescribeOptions(SessionMeta m)
+    {
+        var mode = AgentCatalog.ModesFor(m.Agent).FirstOrDefault(x => x.Id == m.Mode)?.Label ?? "默认";
+        return $"模型：{m.Model ?? "默认"} · 模式：{mode}";
+    }
+
+    /// <summary>Creates a session that continues a conversation started on this PC (e.g. in Claude Desktop or the Codex app).</summary>
+    public Session Import(string agentId, string resumeToken, string cwd, string title, IEnumerable<JsonObject> history)
+    {
+        var existing = _sessions.Values.FirstOrDefault(x => x.Meta.Agent == agentId && x.Meta.ResumeToken == resumeToken);
+        if (existing is not null) return existing;
+        var now = Session.Now();
+        var meta = new SessionMeta
+        {
+            Id = Guid.NewGuid().ToString("n")[..16],
+            Agent = agentId,
+            Cwd = cwd,
+            Title = string.IsNullOrWhiteSpace(title) ? "导入的对话" : title,
+            TitleFromPrompt = false,
+            ResumeToken = resumeToken,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var s = Attach(new Session(meta));
+        foreach (var ev in history) s.Emit(ev);
+        s.Emit(Ev.Notice("已从电脑导入此对话，发送消息即可继续。"));
+        s.Emit(Ev.Status(SessionStates.Stopped));
+        s.Dirty = true;
+        SaveMeta(s);
+        return s;
+    }
+
+    private readonly ConcurrentDictionary<string, int> _gitRefreshVersion = new();
+
+    private void ScheduleGitRefresh(Session s)
+    {
+        var version = _gitRefreshVersion.AddOrUpdate(s.Meta.Id, 1, (_, v) => v + 1);
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(800);
+            if (_gitRefreshVersion.GetValueOrDefault(s.Meta.Id) != version) return;
+            if (!Directory.Exists(s.Meta.Cwd)) return;
+            s.SetGitStats(await GitService.QuickStatsAsync(s.Meta.Cwd, CancellationToken.None));
+        });
+    }
+
+    public void RefreshGitStats(string id)
+    {
+        if (Get(id) is { } s) ScheduleGitRefresh(s);
     }
 
     public async Task InterruptAsync(string id, CancellationToken ct)
     {
-        var s = Get(id) ?? throw new KeyNotFoundException("Session not found");
+        var s = Get(id) ?? throw new KeyNotFoundException("会话不存在");
         if (s.Adapter is not null) await s.Adapter.InterruptAsync(ct);
     }
 
     public async Task RespondApprovalAsync(string id, string approvalId, string decision, CancellationToken ct)
     {
-        var s = Get(id) ?? throw new KeyNotFoundException("Session not found");
-        if (s.Adapter is null) throw new InvalidOperationException("Agent is not running");
+        var s = Get(id) ?? throw new KeyNotFoundException("会话不存在");
+        if (s.Adapter is null) throw new InvalidOperationException("Agent 未运行");
         await s.Adapter.RespondApprovalAsync(approvalId, decision, ct);
     }
 
     public async Task StopAsync(string id)
     {
-        var s = Get(id) ?? throw new KeyNotFoundException("Session not found");
+        var s = Get(id) ?? throw new KeyNotFoundException("会话不存在");
         if (s.Adapter is null) return;
         s.Disposing = true;
         await s.Adapter.DisposeAsync();
         s.Adapter = null;
         s.Disposing = false;
-        s.Emit(Ev.Status(SessionStates.Stopped, "Stopped"));
+        s.Emit(Ev.Status(SessionStates.Stopped, "已停止"));
     }
 
     public async Task DeleteAsync(string id)
@@ -161,7 +235,7 @@ public sealed class SessionManager : IAsyncDisposable
 
     public void Rename(string id, string title)
     {
-        var s = Get(id) ?? throw new KeyNotFoundException("Session not found");
+        var s = Get(id) ?? throw new KeyNotFoundException("会话不存在");
         s.Meta.Title = title;
         s.Meta.TitleFromPrompt = false;
         s.Dirty = true;

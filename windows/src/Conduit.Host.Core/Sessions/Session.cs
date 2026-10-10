@@ -12,6 +12,7 @@ public sealed class SessionMeta
     public string Title { get; set; } = "";
     public string Cwd { get; set; } = "";
     public string? Model { get; set; }
+    public string? Mode { get; set; }
     public string? ResumeToken { get; set; }
     public long CreatedAt { get; set; }
     public long UpdatedAt { get; set; }
@@ -38,6 +39,7 @@ public sealed class Session : IAgentSink
     private int _done, _total;
     private long _turnStartedAt, _turnEndedAt;
     private string _preview = "";
+    private (int Added, int Deleted, int Files, string Branch)? _git;
 
     public SessionMeta Meta { get; }
     public IAgentAdapter? Adapter { get; set; }
@@ -139,6 +141,7 @@ public sealed class Session : IAgentSink
 
             case Ev.KUser:
                 var text = (string?)ev["text"] ?? "";
+                if (text.Length == 0 && (int?)ev["images"] > 0) text = "[图片]";
                 _preview = Text.FirstLine(text, 140);
                 if (Meta.TitleFromPrompt)
                 {
@@ -179,8 +182,8 @@ public sealed class Session : IAgentSink
         lock (_lock)
         {
             foreach (var aid in _openApprovals.ToList()) AppendLocked(Ev.ApprovalDone(aid, "cancelled"));
-            if (reason is { Length: > 0 }) AppendLocked(Ev.Error($"Agent exited ({exitCode}): {Text.Clip(reason, 1500)}"));
-            AppendLocked(Ev.Status(SessionStates.Stopped, exitCode is 0 or null ? null : $"Exited with code {exitCode}"));
+            if (reason is { Length: > 0 }) AppendLocked(Ev.Error($"Agent 已退出（{exitCode}）：{Text.Clip(reason, 1500)}"));
+            AppendLocked(Ev.Status(SessionStates.Stopped, exitCode is 0 or null ? null : $"退出代码 {exitCode}"));
         }
     }
 
@@ -222,12 +225,29 @@ public sealed class Session : IAgentSink
         }
     }
 
+    public void SetGitStats((int Added, int Deleted, int Files, string Branch)? stats)
+    {
+        lock (_lock)
+        {
+            if (_git == stats) return;
+            _git = stats;
+        }
+        SummaryChanged?.Invoke(this);
+    }
+
     public JsonObject Summary()
     {
         lock (_lock)
         {
             return new JsonObject
             {
+                ["model"] = Meta.Model,
+                ["mode"] = Meta.Mode,
+                ["added"] = _git?.Added ?? 0,
+                ["deleted"] = _git?.Deleted ?? 0,
+                ["changedFiles"] = _git?.Files ?? 0,
+                ["branch"] = _git?.Branch,
+                ["isRepo"] = _git is not null,
                 ["id"] = Meta.Id,
                 ["agent"] = Meta.Agent,
                 ["title"] = Meta.Title,

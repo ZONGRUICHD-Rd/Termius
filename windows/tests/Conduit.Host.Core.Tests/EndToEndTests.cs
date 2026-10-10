@@ -91,6 +91,22 @@ public class EndToEndTests : IAsyncLifetime
         Assert.Contains(Ev.KMessage, kinds);
         Assert.Equal(1, kinds.Count(k => k == Ev.KPlan));
 
+        // Options + images + agent metadata
+        var opts = await c.CallAsync("session.setOptions", new JsonObject { ["sessionId"] = sessionId, ["model"] = "sonnet", ["mode"] = "plan" });
+        Assert.Equal("sonnet", (string?)opts["session"]!["model"]);
+        await c.CallAsync("session.send", new JsonObject
+        {
+            ["sessionId"] = sessionId, ["text"] = "look",
+            ["images"] = new JsonArray(new JsonObject { ["mimeType"] = "image/png", ["data"] = Convert.ToBase64String(new byte[] { 1, 2, 3 }) }),
+        });
+        var userEv = await c.WaitEventAsync(e => (string?)e["e"] == "session.event" && (string?)e["p"]!["ev"]!["k"] == Ev.KUser && (string?)e["p"]!["ev"]!["text"] == "look");
+        Assert.Equal(1, (int?)userEv["p"]!["ev"]!["images"]);
+        var info2 = await c.CallAsync("host.info");
+        Assert.NotNull(info2["routes"]);
+
+        var conn = await c.CallAsync("host.setConnection", new JsonObject { ["ddns"] = new JsonObject { ["enabled"] = true, ["domain"] = "pc.example.com", ["port"] = 8443 } });
+        Assert.Contains(((JsonArray)conn["routes"]!), r => (string?)r!["kind"] == "ddns" && (string?)r["url"] == "ws://pc.example.com:8443");
+
         var fs = await c.CallAsync("fs.list", new JsonObject { ["path"] = _dir });
         Assert.Equal(Path.GetFullPath(_dir), (string?)fs["path"]);
     }

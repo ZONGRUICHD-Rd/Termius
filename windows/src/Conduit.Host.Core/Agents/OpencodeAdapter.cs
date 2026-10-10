@@ -27,11 +27,15 @@ public sealed class OpencodeAdapter : IAgentAdapter
     private readonly ConcurrentDictionary<string, string> _messageRoles = new();
     private readonly ConcurrentDictionary<string, bool> _permissions = new();
     private string? _lastPrompt;
+    private string? _model;
+    private string? _mode;
     private bool _busy;
 
     public async Task StartAsync(AgentStartOptions o, IAgentSink sink, CancellationToken ct)
     {
         _sink = sink;
+        _model = o.Model;
+        _mode = o.Mode;
         var port = FreePort();
         var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
         _proc = JsonlProcess.Start(o.ExecutablePath, ["serve", "--hostname", "127.0.0.1", "--port", port.ToString()], o.WorkingDirectory,
@@ -96,11 +100,32 @@ public sealed class OpencodeAdapter : IAgentAdapter
         throw new TimeoutException("opencode server did not start within 30s: " + _proc?.StderrTail());
     }
 
-    public async Task SendAsync(string text, CancellationToken ct)
+    /// <summary>opencode's built-in primary agents.</summary>
+    public static readonly AgentMode[] Modes =
+    [
+        new("build", "构建", "默认模式，可以修改文件和运行命令"),
+        new("plan", "计划", "只分析和规划，不做修改"),
+    ];
+
+    public async Task SendAsync(string text, IReadOnlyList<ImageInput> images, CancellationToken ct)
     {
         _lastPrompt = text;
-        _sink.Emit(Ev.Status(SessionStates.Running, "Thinking…"));
-        var body = new JsonObject { ["parts"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text }) };
+        _sink.Emit(Ev.Status(SessionStates.Running, "思考中…"));
+        var parts = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text });
+        foreach (var img in images)
+        {
+            parts.Add(new JsonObject
+            {
+                ["type"] = "file",
+                ["mime"] = img.MimeType,
+                ["filename"] = "image" + img.Extension,
+                ["url"] = $"data:{img.MimeType};base64,{img.Base64}",
+            });
+        }
+        var body = new JsonObject { ["parts"] = parts };
+        if (_mode is "build" or "plan") body["agent"] = _mode;
+        if (_model is { } m && m.Contains('/'))
+            body["model"] = new JsonObject { ["providerID"] = m[..m.IndexOf('/')], ["modelID"] = m[(m.IndexOf('/') + 1)..] };
         using var r = await _http.PostAsync($"/session/{_sessionId}/prompt_async", Json(body), ct);
         if (r.StatusCode == HttpStatusCode.NotFound)
         {
@@ -113,6 +138,13 @@ public sealed class OpencodeAdapter : IAgentAdapter
             _sink.Emit(Ev.Error($"opencode: {(int)r.StatusCode} {Text.Clip(err, 300)}"));
             _sink.Emit(Ev.Status(SessionStates.Error));
         }
+    }
+
+    public Task<bool> UpdateOptionsAsync(string? model, string? mode, CancellationToken ct)
+    {
+        if (model is not null) _model = model.Length == 0 ? null : model;
+        if (mode is not null) _mode = mode;
+        return Task.FromResult(true);
     }
 
     public async Task InterruptAsync(CancellationToken ct)
@@ -135,7 +167,7 @@ public sealed class OpencodeAdapter : IAgentAdapter
             using var r2 = await _http.PostAsync($"/permission/{approvalId}/reply", Json(new JsonObject { ["reply"] = reply }), ct);
         }
         _sink.Emit(Ev.ApprovalDone(approvalId, decision));
-        if (_permissions.IsEmpty && _busy) _sink.Emit(Ev.Status(SessionStates.Running, "Continuing…"));
+        if (_permissions.IsEmpty && _busy) _sink.Emit(Ev.Status(SessionStates.Running, "继续执行…"));
     }
 
     private static StringContent Json(JsonNode n) => new(n.ToJsonString(), Encoding.UTF8, "application/json");
@@ -217,11 +249,11 @@ public sealed class OpencodeAdapter : IAgentAdapter
                         if (_permissions.IsEmpty) _sink.Emit(Ev.Status(SessionStates.Running));
                         break;
                     case "retry":
-                        _sink.Emit(Ev.Status(SessionStates.Running, "Retrying: " + (string?)p["status"]?["message"]));
+                        _sink.Emit(Ev.Status(SessionStates.Running, "重试中：" + (string?)p["status"]?["message"]));
                         break;
                     case "idle":
                         _busy = false;
-                        _sink.Emit(Ev.Status(SessionStates.Idle, "Done"));
+                        _sink.Emit(Ev.Status(SessionStates.Idle, "已完成"));
                         break;
                 }
                 break;
@@ -229,12 +261,12 @@ public sealed class OpencodeAdapter : IAgentAdapter
             case "session.idle":
                 if (Sid(p) != _sessionId) break;
                 _busy = false;
-                _sink.Emit(Ev.Status(SessionStates.Idle, "Done"));
+                _sink.Emit(Ev.Status(SessionStates.Idle, "已完成"));
                 break;
 
             case "session.error":
                 if (Sid(p) is { } s && s != _sessionId) break;
-                var msg = (string?)p["error"]?["data"]?["message"] ?? (string?)p["error"]?["name"] ?? "opencode error";
+                var msg = (string?)p["error"]?["data"]?["message"] ?? (string?)p["error"]?["name"] ?? "opencode 出错";
                 _sink.Emit(Ev.Error(msg));
                 break;
 
@@ -248,10 +280,10 @@ public sealed class OpencodeAdapter : IAgentAdapter
                 if (Sid(p) != _sessionId) break;
                 var pid = (string?)p["id"] ?? "";
                 _permissions[pid] = true;
-                var title = (string?)p["title"] ?? $"Allow {(string?)p["permission"] ?? (string?)p["type"] ?? "action"}";
+                var title = (string?)p["title"] ?? $"允许 {(string?)p["permission"] ?? (string?)p["type"] ?? "action"}";
                 var patterns = p["patterns"] is JsonArray pa ? string.Join("\n", pa.Select(x => x?.ToString())) : (string?)p["pattern"]?.ToString();
                 _sink.Emit(Ev.Approval(pid, title, patterns ?? p["metadata"]?.ToJsonString() ?? "", (string?)p["type"] ?? (string?)p["permission"] ?? "tool"));
-                _sink.Emit(Ev.Status(SessionStates.Waiting, "Needs approval: " + title));
+                _sink.Emit(Ev.Status(SessionStates.Waiting, "需要批准：" + title));
                 break;
 
             case "permission.replied":

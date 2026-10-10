@@ -1,4 +1,6 @@
 using System.Text.Json.Nodes;
+using Conduit.Host.Core.Agents;
+using Conduit.Host.Core.Git;
 using Conduit.Host.Core.Protocol;
 using Conduit.Host.Core.Sessions;
 
@@ -12,7 +14,19 @@ public sealed class RpcDispatcher(HostRuntime host)
         var id = req["id"];
         var method = (string?)req["m"] ?? "";
         var p = req["p"] as JsonObject ?? new JsonObject();
-        string S(string key) => (string?)p[key] ?? throw new ArgumentException($"Missing '{key}'");
+        string S(string key) => (string?)p[key] ?? throw new ArgumentException($"缺少参数 {key}");
+        string Cwd() => (string?)p["cwd"] is { Length: > 0 } c ? c
+            : host.Sessions.Get(S("sessionId"))?.Meta.Cwd ?? throw new KeyNotFoundException("会话不存在");
+        List<ImageInput> Images() => (p["images"] as JsonArray ?? [])
+            .OfType<JsonObject>()
+            .Select(i => new ImageInput((string?)i["mimeType"] ?? "image/png", (string?)i["data"] ?? ""))
+            .Where(i => i.Base64.Length > 0)
+            .Take(8)
+            .ToList();
+        void RefreshStats()
+        {
+            if ((string?)p["sessionId"] is { } sid) host.Sessions.RefreshGitStats(sid);
+        }
 
         try
         {
@@ -37,15 +51,17 @@ public sealed class RpcDispatcher(HostRuntime host)
 
                 case "session.create":
                 {
-                    var s = await host.Sessions.CreateAsync(S("agent"), S("cwd"), (string?)p["title"], (string?)p["model"], ct);
+                    var s = await host.Sessions.CreateAsync(S("agent"), S("cwd"), (string?)p["title"], (string?)p["model"], (string?)p["mode"], ct);
                     host.RememberDirectory(s.Meta.Cwd);
-                    if ((string?)p["prompt"] is { Length: > 0 } prompt) await host.Sessions.SendAsync(s.Meta.Id, prompt, ct);
+                    var images = Images();
+                    if ((string?)p["prompt"] is { Length: > 0 } prompt || images.Count > 0)
+                        await host.Sessions.SendAsync(s.Meta.Id, (string?)p["prompt"] ?? "", images, ct);
                     conn.SendResult(id, new JsonObject { ["session"] = s.Summary() });
                     break;
                 }
 
                 case "session.send":
-                    await host.Sessions.SendAsync(S("sessionId"), S("text"), ct);
+                    await host.Sessions.SendAsync(S("sessionId"), (string?)p["text"] ?? "", Images(), ct);
                     conn.SendResult(id, new JsonObject());
                     break;
 
@@ -71,7 +87,7 @@ public sealed class RpcDispatcher(HostRuntime host)
 
                 case "session.subscribe":
                 {
-                    var s = host.Sessions.Get(S("sessionId")) ?? throw new KeyNotFoundException("Session not found");
+                    var s = host.Sessions.Get(S("sessionId")) ?? throw new KeyNotFoundException("会话不存在");
                     var since = (long?)p["since"] ?? 0;
                     // Atomic w.r.t. the session's event stream: every event after the backfill is delivered live,
                     // and always after this response (both go through the same ordered outbox).
@@ -93,11 +109,73 @@ public sealed class RpcDispatcher(HostRuntime host)
                 {
                     var decision = S("decision");
                     if (decision is not (ApprovalDecisions.Allow or ApprovalDecisions.AllowAlways or ApprovalDecisions.Deny))
-                        throw new ArgumentException("Invalid decision");
+                        throw new ArgumentException("无效的审批选项");
                     await host.Sessions.RespondApprovalAsync(S("sessionId"), S("approvalId"), decision, ct);
                     conn.SendResult(id, new JsonObject());
                     break;
                 }
+
+                case "session.setOptions":
+                    await host.Sessions.SetOptionsAsync(S("sessionId"), (string?)p["model"], (string?)p["mode"], ct);
+                    conn.SendResult(id, new JsonObject { ["session"] = host.Sessions.Get(S("sessionId"))!.Summary() });
+                    break;
+
+                // ---- code changes (Codex / Claude Code mobile "review & ship") ----
+                case "git.status":
+                    conn.SendResult(id, await GitService.StatusAsync(Cwd(), ct));
+                    break;
+                case "git.diff":
+                    conn.SendResult(id, await GitService.DiffAsync(Cwd(), (string?)p["path"], ct));
+                    break;
+                case "git.commit":
+                    conn.SendResult(id, await GitService.CommitAsync(Cwd(), S("message"), ct));
+                    RefreshStats();
+                    break;
+                case "git.push":
+                    conn.SendResult(id, await GitService.PushAsync(Cwd(), ct));
+                    RefreshStats();
+                    break;
+                case "git.branch":
+                    conn.SendResult(id, await GitService.CreateBranchAsync(Cwd(), S("name"), ct));
+                    RefreshStats();
+                    break;
+                case "git.pr":
+                    conn.SendResult(id, await GitService.CreatePullRequestAsync(Cwd(), S("title"), (string?)p["body"] ?? "", (bool?)p["draft"] == true, ct));
+                    break;
+                case "git.discard":
+                    conn.SendResult(id, await GitService.DiscardFileAsync(Cwd(), S("path"), ct));
+                    RefreshStats();
+                    break;
+
+                // ---- conversations started on the PC ----
+                case "history.list":
+                {
+                    var agent = S("agent");
+                    var items = History.List(agent).Select(i => (JsonNode)new JsonObject
+                    {
+                        ["id"] = i.Id,
+                        ["title"] = i.Title,
+                        ["cwd"] = i.Cwd,
+                        ["updatedAt"] = i.UpdatedAt.ToUnixTimeMilliseconds(),
+                        ["imported"] = host.Sessions.All.Any(x => x.Meta.Agent == agent && x.Meta.ResumeToken == i.Id),
+                    }).ToArray();
+                    conn.SendResult(id, new JsonObject { ["supported"] = History.Supports(agent), ["items"] = new JsonArray(items) });
+                    break;
+                }
+                case "history.import":
+                {
+                    var item = History.Find(S("agent"), S("id")) ?? throw new KeyNotFoundException("找不到这条对话记录");
+                    var cwd = Directory.Exists(item.Cwd) ? item.Cwd : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    var s = host.Sessions.Import(item.Agent, item.Id, cwd, item.Title, History.LoadEvents(item));
+                    conn.SendResult(id, new JsonObject { ["session"] = s.Summary() });
+                    break;
+                }
+
+                // ---- connection settings (also editable from the phone) ----
+                case "host.setConnection":
+                    host.ApplyConnectionSettings(p);
+                    conn.SendResult(id, host.Info());
+                    break;
 
                 case "fs.list":
                     conn.SendResult(id, FileBrowser.List((string?)p["path"], host.Config.RecentDirectories));
@@ -109,11 +187,15 @@ public sealed class RpcDispatcher(HostRuntime host)
                     break;
 
                 default:
-                    conn.SendError(id, $"Unknown method '{method}'", "unknown_method");
+                    conn.SendError(id, $"不支持的请求：{method}（请更新电脑端）", "unknown_method");
                     break;
             }
         }
         catch (OperationCanceledException) { }
+        catch (TimeoutException ex)
+        {
+            conn.SendError(id, ex.Message, "timeout");
+        }
         catch (Exception ex)
         {
             conn.SendError(id, ex.Message, ex switch
@@ -125,4 +207,5 @@ public sealed class RpcDispatcher(HostRuntime host)
             });
         }
     }
+
 }
