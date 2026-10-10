@@ -61,7 +61,12 @@ jobs:
         shell: pwsh
         run: |
           $dir = "out/ConduitHost-win-x64"
-          if (!(Test-Path "$dir/ConduitHost.pri")) { throw "ConduitHost.pri missing — XAML would fail to load" }
+          "PRI/XBF files produced by the build:"
+          Get-ChildItem -Recurse windows/src/Conduit.Host/bin, windows/src/Conduit.Host/obj, $dir -Include *.pri, *.xbf -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notlike "Microsoft.*" } | ForEach-Object { $_.FullName }
+          $pri = Get-ChildItem $dir -Filter *.pri | Where-Object { $_.Name -notlike "Microsoft.*" }
+          if (!$pri) { throw "App PRI (compiled XAML) missing from the publish folder" }
+          "App PRI: $($pri.Name)"
           $env:CONDUIT_NO_DIALOG = "1"
           $log = Join-Path $env:LOCALAPPDATA "Conduit/crash.log"
           Remove-Item $log -ErrorAction SilentlyContinue

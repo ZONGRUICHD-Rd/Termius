@@ -40,4 +40,14 @@
     <ProjectReference Include="..\Conduit.Host.Core\Conduit.Host.Core.csproj" />
   </ItemGroup>
 
+  <!-- Unpackaged publish doesn't always carry the app's PRI (compiled XAML) into PublishDir; copy it explicitly. -->
+  <Target Name="ConduitCopyPriToPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <_ConduitPri Include="$(OutDir)*.pri" Exclude="$(OutDir)Microsoft.*.pri" />
+      <_ConduitPri Include="$(ProjectPriFullPath)" Condition="'$(ProjectPriFullPath)' != '' And Exists('$(ProjectPriFullPath)')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_ConduitPri)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Conduit PRI copied to publish: @(_ConduitPri)" />
+  </Target>
+
 </Project>
