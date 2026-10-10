@@ -11,7 +11,7 @@ public partial class App : Application
     private MainWindow? _window;
 
     public static HostRuntime Runtime { get; private set; } = null!;
-    public static MainWindow? Window { get; private set; }
+    public static MainWindow? Window { get; internal set; }
 
     public App()
     {

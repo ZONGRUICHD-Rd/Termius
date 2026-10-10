@@ -68,6 +68,7 @@ jobs:
           if (!$pri) { throw "App PRI (compiled XAML) missing from the publish folder" }
           "App PRI: $($pri.Name)"
           $env:CONDUIT_NO_DIALOG = "1"
+          $env:CONDUIT_SMOKE = "1"
           $log = Join-Path $env:LOCALAPPDATA "Conduit/crash.log"
           Remove-Item $log -ErrorAction SilentlyContinue
           $p = Start-Process "$dir/ConduitHost.exe" -PassThru
