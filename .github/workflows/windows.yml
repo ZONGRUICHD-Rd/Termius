@@ -30,6 +30,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
         arch: [x64, arm64]
     steps:
@@ -37,18 +38,24 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      # WinUI's PRI/XAML packaging tasks ship with Visual Studio, not with the dotnet CLI — use VS MSBuild.
+      - uses: microsoft/setup-msbuild@v2
       - name: Publish WinUI 3 app (unpackaged, self-contained)
         shell: pwsh
         run: |
-          $platform = if ("${{ matrix.arch }}" -eq "x64") { "x64" } else { "ARM64" }
-          dotnet publish windows/src/Conduit.Host/Conduit.Host.csproj -c Release `
-            -r win-${{ matrix.arch }} -p:Platform=$platform --self-contained true `
-            -o out/ConduitHost-win-${{ matrix.arch }}
+          $arch = "${{ matrix.arch }}"
+          $platform = if ($arch -eq "x64") { "x64" } else { "ARM64" }
+          $dir = Join-Path $pwd "out/ConduitHost-win-$arch"
+          msbuild windows/src/Conduit.Host/Conduit.Host.csproj /restore /t:Publish /m /v:minimal `
+            /p:Configuration=Release /p:Platform=$platform /p:RuntimeIdentifier=win-$arch `
+            /p:SelfContained=true /p:PublishDir="$dir/"
+          if ($LASTEXITCODE -ne 0) { throw "msbuild failed" }
           dotnet publish windows/src/Conduit.Host.Cli/Conduit.Host.Cli.csproj -c Release `
-            -r win-${{ matrix.arch }} --self-contained true -p:PublishSingleFile=true `
-            -o out/ConduitHost-win-${{ matrix.arch }}/cli
-          if (!(Test-Path out/ConduitHost-win-${{ matrix.arch }}/ConduitHost.exe)) { throw "ConduitHost.exe missing" }
-          Compress-Archive -Path out/ConduitHost-win-${{ matrix.arch }}/* -DestinationPath out/ConduitHost-win-${{ matrix.arch }}.zip
+            -r win-$arch --self-contained true -p:PublishSingleFile=true -o "$dir/cli"
+          if ($LASTEXITCODE -ne 0) { throw "cli publish failed" }
+          if (!(Test-Path "$dir/ConduitHost.exe")) { throw "ConduitHost.exe missing" }
+          Get-ChildItem $dir | Select-Object -First 30 | Format-Table Name, Length
+          Compress-Archive -Path "$dir/*" -DestinationPath "out/ConduitHost-win-$arch.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: ConduitHost-win-${{ matrix.arch }}
