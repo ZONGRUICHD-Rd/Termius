@@ -24,25 +24,25 @@ struct PairView: View {
                     Group {
                         switch phase {
                         case .scanning:
-                            Text("Point your camera at the QR code in Conduit Host.")
+                            Text("用相机对准电脑上 Conduit Host 显示的二维码。")
                                 .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
                         case .connecting(let name):
                             HStack(spacing: 10) {
                                 ProgressView()
-                                Text("Securing a connection to \(name)…").font(.subheadline)
+                                Text("正在与 \(name) 建立加密连接…").font(.subheadline)
                             }
                         case .failed(let message):
                             Label(message, systemImage: "exclamationmark.triangle.fill")
                                 .font(.subheadline).foregroundStyle(Brand.rust).multilineTextAlignment(.center)
                         case .done(let name):
-                            Label("Paired with \(name)", systemImage: "checkmark.seal.fill")
+                            Label("已与 \(name) 配对", systemImage: "checkmark.seal.fill")
                                 .font(.headline).foregroundStyle(Brand.olive)
                         }
                     }
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
 
                     VStack(alignment: .leading, spacing: 10) {
-                        EyebrowLabel(text: "Or paste the pairing link")
+                        EyebrowLabel(text: "或粘贴配对链接")
                         HStack(spacing: 10) {
                             TextField("conduit://pair?d=…", text: $manualCode, axis: .vertical)
                                 .lineLimit(1...3)
@@ -60,13 +60,13 @@ struct PairView: View {
                             .buttonBorderShape(.capsule)
                             .labelStyle(.iconOnly)
                         }
-                        Button("Connect") { submit(manualCode) }
+                        Button("连接") { submit(manualCode) }
                             .buttonStyle(.glassProminent)
                             .disabled(manualCode.isEmpty || isBusy)
                     }
 
                     if RuntimeEnvironment.isLiveContainer {
-                        Label("Running in LiveContainer — if the camera isn't available, copy the link from Conduit Host and paste it here.",
+                        Label("正在 LiveContainer 中运行——如果相机不可用，请在电脑端复制配对链接并粘贴到这里。",
                               systemImage: "shippingbox")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
@@ -75,7 +75,7 @@ struct PairView: View {
                 .animation(.smooth, value: phase)
             }
             .paperBackground()
-            .navigationTitle("Pair a computer")
+            .navigationTitle("配对电脑")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -97,8 +97,8 @@ struct PairView: View {
             if cameraDenied {
                 VStack(spacing: 10) {
                     Image(systemName: "camera.fill").font(.largeTitle).foregroundStyle(.secondary)
-                    Text("Camera unavailable").font(.headline)
-                    Text("Allow camera access in Settings, or paste the link below.").font(.footnote).foregroundStyle(.secondary)
+                    Text("相机不可用").font(.headline)
+                    Text("请在系统设置中允许相机访问，或在下方粘贴链接。").font(.footnote).foregroundStyle(.secondary)
                 }
             } else {
                 QRScannerView { code in

@@ -13,7 +13,7 @@ struct ChatRow: View, Equatable {
 
     var body: some View {
         switch item.kind {
-        case .user: UserBubble(text: item.text)
+        case .user: UserBubble(text: item.text, images: item.images)
         case .assistant: AssistantMessage(item: item, agent: agent)
         case .reasoning: if showReasoning { ReasoningRow(item: item) }
         case .tool: ToolRow(item: item)
@@ -31,10 +31,23 @@ struct ChatRow: View, Equatable {
 
 private struct UserBubble: View {
     let text: String
+    var images = 0
 
     var body: some View {
         HStack {
             Spacer(minLength: 48)
+            VStack(alignment: .trailing, spacing: 6) {
+                if images > 0 {
+                    Label("\(images) 张图片", systemImage: "photo.on.rectangle")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                }
+                if !text.isEmpty { bubble }
+            }
+        }
+    }
+
+    private var bubble: some View {
+        HStack {
             Text(text)
                 .font(.body)
                 .foregroundStyle(Brand.ink)
@@ -81,7 +94,7 @@ private struct ReasoningRow: View {
         DisclosureGroup(isExpanded: $open) {
             Text(item.text).font(.footnote).foregroundStyle(.secondary).italic().frame(maxWidth: .infinity, alignment: .leading)
         } label: {
-            Label(item.streaming ? "Thinking…" : "Thought", systemImage: "brain")
+            Label(item.streaming ? "思考中…" : "思考过程", systemImage: "brain")
                 .font(.footnote.weight(.medium)).foregroundStyle(.secondary)
         }
         .tint(.secondary)
@@ -124,7 +137,7 @@ struct ToolRow: View {
                         Image(systemName: icon).font(.caption.weight(.semibold)).foregroundStyle(color)
                     }
                     .frame(width: 22, height: 22)
-                    Text(item.title ?? item.name ?? "Tool")
+                    Text(item.title ?? item.name ?? "工具")
                         .font(.callout.monospaced())
                         .foregroundStyle(Brand.ink)
                         .lineLimit(1)
@@ -177,7 +190,7 @@ private struct ApprovalRow: View {
             Image(systemName: item.decision == nil ? "hand.raised.fill" : (item.decision == "deny" ? "hand.thumbsdown.fill" : "checkmark.shield.fill"))
                 .foregroundStyle(item.decision == nil ? Brand.amber : (item.decision == "deny" ? Brand.rust : Brand.olive))
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title ?? "Approval").font(.callout.weight(.semibold))
+                Text(item.title ?? "确认请求").font(.callout.weight(.semibold))
                 Text(decisionLabel).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -188,12 +201,12 @@ private struct ApprovalRow: View {
 
     private var decisionLabel: String {
         switch item.decision {
-        case nil: return "Waiting for you"
-        case "allow": return "Allowed once"
-        case "allow_always": return "Always allowed"
-        case "deny": return "Denied"
-        case "cancelled": return "Cancelled"
-        default: return "Resolved"
+        case nil: return "等待你确认"
+        case "allow": return "已允许一次"
+        case "allow_always": return "已始终允许"
+        case "deny": return "已拒绝"
+        case "cancelled": return "已取消"
+        default: return "已处理"
         }
     }
 }

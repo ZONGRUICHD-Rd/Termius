@@ -33,12 +33,12 @@ enum Brand {
 
     static func stateLabel(_ state: String) -> String {
         switch state {
-        case "starting": return "Starting"
-        case "running": return "Working"
-        case "waiting": return "Needs you"
-        case "idle": return "Ready"
-        case "error": return "Error"
-        default: return "Stopped"
+        case "starting": return "启动中"
+        case "running": return "工作中"
+        case "waiting": return "等你确认"
+        case "idle": return "已完成"
+        case "error": return "出错"
+        default: return "已停止"
         }
     }
 }
@@ -57,7 +57,7 @@ struct AgentStyle {
                                         symbol: "chevron.left.forwardslash.chevron.right", glyph: nil)
         case "pi": return AgentStyle(name: "Pi", tint: Color(red: 0.49, green: 0.42, blue: 0.86), symbol: nil, glyph: "π")
         case "opencode": return AgentStyle(name: "opencode", tint: Brand.sky, symbol: "curlybraces", glyph: nil)
-        default: return AgentStyle(name: "Demo", tint: Brand.olive, symbol: "sparkles", glyph: nil)
+        default: return AgentStyle(name: "演示", tint: Brand.olive, symbol: "sparkles", glyph: nil)
         }
     }
 }
@@ -107,6 +107,52 @@ struct SparkShape: Shape {
             p.closeSubpath()
         }
         p.addEllipse(in: CGRect(x: c.x - r * 0.16, y: c.y - r * 0.16, width: r * 0.32, height: r * 0.32))
+        return p
+    }
+}
+
+/// The Conduit mark: a thick "C" (the conduit) with a four-point spark in its mouth. Matches AppIcon.icon.
+struct ConduitMark: View {
+    var color: Color = Brand.clay
+    var sparkColor: Color?
+
+    var body: some View {
+        GeometryReader { g in
+            let s = min(g.size.width, g.size.height) / 1024
+            ZStack {
+                ConduitArcShape().fill(color)
+                FourPointSparkShape().fill(sparkColor ?? color)
+            }
+            .frame(width: 1024 * s, height: 1024 * s)
+        }
+        .aspectRatio(1, contentMode: .fit)
+    }
+}
+
+struct ConduitArcShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let k = min(rect.width, rect.height) / 1024
+        let c = CGPoint(x: rect.minX + 492 * k, y: rect.minY + 512 * k)
+        var p = Path()
+        p.addArc(center: c, radius: 268 * k, startAngle: .degrees(-62), endAngle: .degrees(62), clockwise: true)
+        return p.strokedPath(StrokeStyle(lineWidth: 150 * k, lineCap: .round))
+    }
+}
+
+struct FourPointSparkShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let k = min(rect.width, rect.height) / 1024
+        let cx = rect.minX + 742 * k, cy = rect.minY + 512 * k, r = 132 * k
+        var p = Path()
+        let steps = 120
+        for i in 0...steps {
+            let a = Double(i) / Double(steps) * 2 * .pi
+            let c = cos(a), sn = sin(a)
+            let m = pow(pow(abs(c), 2.0 / 3) + pow(abs(sn), 2.0 / 3), -1.5)
+            let pt = CGPoint(x: cx + r * c * m, y: cy - r * sn * m)
+            if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+        }
+        p.closeSubpath()
         return p
     }
 }

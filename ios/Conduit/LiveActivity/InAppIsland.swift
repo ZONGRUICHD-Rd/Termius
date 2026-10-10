@@ -44,7 +44,7 @@ struct InAppIsland: View {
                 AgentGlyph(agent: s.agent, size: 10)
             }
             .frame(width: 18, height: 18)
-            Text(s.state == .waiting ? "Needs approval" : (s.detail ?? Brand.stateLabel(s.state.rawValue)))
+            Text(s.state == .waiting ? "需要确认" : (s.detail ?? Brand.stateLabel(s.state.rawValue)))
                 .font(.caption.weight(.semibold))
                 .lineLimit(1)
                 .frame(maxWidth: 170)
@@ -73,25 +73,25 @@ struct InAppIsland: View {
                 ProgressView(value: p) {
                     EmptyView()
                 } currentValueLabel: {
-                    Text("\(s.done) of \(s.total) steps").font(.caption2)
+                    Text("第 \(s.done)/\(s.total) 步").font(.caption2)
                 }
                 .tint(Brand.stateColor(s.state.rawValue))
             }
             HStack {
                 if s.state == .waiting, let approval = store.transcript(for: s.id).pendingApprovals.first {
-                    Button("Deny", role: .destructive) { respond(store, s, approval, "deny") }
+                    Button("拒绝", role: .destructive) { respond(store, s, approval, "deny") }
                         .buttonStyle(.glass)
-                    Button("Allow") { respond(store, s, approval, "allow") }
+                    Button("允许") { respond(store, s, approval, "allow") }
                         .buttonStyle(.glassProminent)
                 } else if s.state == .waiting {
-                    Button("Review") { open(s) }.buttonStyle(.glassProminent)
+                    Button("查看") { open(s) }.buttonStyle(.glassProminent)
                 } else {
-                    Button("Open") { open(s) }.buttonStyle(.glass)
-                    Button("Stop", role: .destructive) { Task { await store.interrupt(s.id) } }.buttonStyle(.glass)
+                    Button("打开") { open(s) }.buttonStyle(.glass)
+                    Button("停止", role: .destructive) { Task { await store.interrupt(s.id) } }.buttonStyle(.glass)
                 }
                 Spacer()
                 if store.active.count > 1 {
-                    Text("\(store.active.count) agents running").font(.caption2).foregroundStyle(.secondary)
+                    Text("\(store.active.count) 个 Agent 运行中").font(.caption2).foregroundStyle(.secondary)
                 }
             }
             .disabled(busy)
@@ -102,8 +102,7 @@ struct InAppIsland: View {
 
     private func open(_ s: SessionSummary) {
         withAnimation(.bouncy) { expanded = false }
-        model.selectedTab = .sessions
-        model.pendingSessionId = s.id
+        model.open(sessionId: s.id)
     }
 
     private func respond(_ store: SessionStore, _ s: SessionSummary, _ approval: ChatItem, _ decision: String) {

@@ -10,7 +10,7 @@
         <StackPanel Padding="40,28,40,40" MaxWidth="1040" HorizontalAlignment="Stretch">
             <TextBlock x:Name="Headline" Text="Conduit Host" Style="{StaticResource PageTitle}" />
             <TextBlock x:Name="Subhead" TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}"
-                       Text="Your coding agents, reachable from your iPhone." />
+                       Text="让 iPhone 随时随地使用这台电脑上的编程 Agent。" />
 
             <Grid Margin="0,24,0,0" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
@@ -21,28 +21,28 @@
                 </Grid.ColumnDefinitions>
                 <Border Style="{StaticResource Card}" Grid.Column="0">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="DIRECT" Style="{StaticResource Eyebrow}" Margin="0" />
+                        <TextBlock Text="内网直连" Style="{StaticResource Eyebrow}" Margin="0" />
                         <TextBlock x:Name="DirectValue" Text="…" FontSize="22" FontFamily="{StaticResource ConduitSerif}" />
                         <TextBlock x:Name="DirectDetail" FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}" />
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource Card}" Grid.Column="1">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="ANYWHERE" Style="{StaticResource Eyebrow}" Margin="0" />
+                        <TextBlock Text="外网访问" Style="{StaticResource Eyebrow}" Margin="0" />
                         <TextBlock x:Name="RelayValue" Text="…" FontSize="22" FontFamily="{StaticResource ConduitSerif}" />
                         <TextBlock x:Name="RelayDetail" FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}" />
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource Card}" Grid.Column="2">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="PHONES" Style="{StaticResource Eyebrow}" Margin="0" />
+                        <TextBlock Text="手机" Style="{StaticResource Eyebrow}" Margin="0" />
                         <TextBlock x:Name="PhonesValue" Text="0" FontSize="22" FontFamily="{StaticResource ConduitSerif}" />
                         <TextBlock x:Name="PhonesDetail" FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}" />
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource Card}" Grid.Column="3">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="AGENTS" Style="{StaticResource Eyebrow}" Margin="0" />
+                        <TextBlock Text="AGENT" Style="{StaticResource Eyebrow}" Margin="0" />
                         <TextBlock x:Name="AgentsValue" Text="0" FontSize="22" FontFamily="{StaticResource ConduitSerif}" />
                         <TextBlock x:Name="AgentsDetail" FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}" />
                     </StackPanel>
@@ -50,14 +50,14 @@
             </Grid>
 
             <InfoBar x:Name="SetupHint" Margin="0,16,0,0" IsOpen="False" IsClosable="False" Severity="Informational"
-                     Title="No phone paired yet" Message="Open “Pair a phone” and scan the QR code with Conduit on your iPhone.">
+                     Title="还没有配对手机" Message="打开“配对手机”，用 iPhone 上的 Conduit 扫描二维码。">
                 <InfoBar.ActionButton>
-                    <Button Content="Pair a phone" Click="Pair_Click" Style="{StaticResource AccentButtonStyle}" />
+                    <Button Content="配对手机" Click="Pair_Click" Style="{StaticResource AccentButtonStyle}" />
                 </InfoBar.ActionButton>
             </InfoBar>
 
-            <TextBlock Text="WORKING NOW" Style="{StaticResource Eyebrow}" />
-            <TextBlock x:Name="NoActive" Text="No agents are running. Start one from your iPhone." Foreground="{ThemeResource ConduitInkSoftBrush}" />
+            <TextBlock Text="正在工作" Style="{StaticResource Eyebrow}" />
+            <TextBlock x:Name="NoActive" Text="没有正在运行的 Agent。可以在 iPhone 上开始新对话。" Foreground="{ThemeResource ConduitInkSoftBrush}" />
             <ItemsControl x:Name="ActiveList">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="local:SessionItem">
@@ -86,8 +86,8 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <TextBlock Text="CONNECTED PHONES" Style="{StaticResource Eyebrow}" />
-            <TextBlock x:Name="NoPhones" Text="No phone is connected right now." Foreground="{ThemeResource ConduitInkSoftBrush}" />
+            <TextBlock Text="已连接的手机" Style="{StaticResource Eyebrow}" />
+            <TextBlock x:Name="NoPhones" Text="当前没有手机连接。" Foreground="{ThemeResource ConduitInkSoftBrush}" />
             <ItemsControl x:Name="PhonesList">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="local:PhoneItem">
@@ -101,7 +101,7 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <TextBlock Text="ACTIVITY" Style="{StaticResource Eyebrow}" />
+            <TextBlock Text="运行日志" Style="{StaticResource Eyebrow}" />
             <Border Style="{StaticResource Card}" Padding="14">
                 <ScrollViewer x:Name="LogScroll" MaxHeight="240">
                     <TextBlock x:Name="LogText" FontFamily="Cascadia Mono, Consolas" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True" />

@@ -126,12 +126,7 @@ struct ConnectionBadge: View {
     private var icon: String {
         switch status {
         case .connected(let r):
-            switch r {
-            case .lan: return "wifi"
-            case .tailscale: return "point.3.connected.trianglepath.dotted"
-            case .relay: return "cloud.fill"
-            case .custom: return "network"
-            }
+            return r.symbol
         case .failed: return "exclamationmark.triangle.fill"
         case .idle: return "pause.circle"
         default: return "arrow.triangle.2.circlepath"
@@ -149,10 +144,10 @@ struct ConnectionBadge: View {
     private var label: String {
         switch status {
         case .connected(let r): return r.label
-        case .connecting: return "Connecting…"
-        case .reconnecting(let n, _): return n > 2 ? "Reconnecting…" : "Connecting…"
-        case .failed: return "Can't connect"
-        case .idle: return "Offline"
+        case .connecting: return "连接中…"
+        case .reconnecting(let n, _): return n > 2 ? "重新连接中…" : "连接中…"
+        case .failed: return "无法连接"
+        case .idle: return "离线"
         }
     }
 }
@@ -179,6 +174,7 @@ struct ElapsedText: View {
 extension Date {
     var relative: String {
         let f = RelativeDateTimeFormatter()
+        f.locale = Locale(identifier: "zh_CN")
         f.unitsStyle = .short
         return f.localizedString(for: self, relativeTo: .now)
     }

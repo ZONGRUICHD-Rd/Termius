@@ -9,11 +9,11 @@
     <ScrollViewer>
         <StackPanel Padding="40,28,40,40" MaxWidth="1040">
             <Grid>
-                <TextBlock Text="Agents" Style="{StaticResource PageTitle}" />
-                <Button x:Name="RescanButton" Content="Rescan" HorizontalAlignment="Right" Click="Rescan_Click" />
+                <TextBlock Text="Agent" Style="{StaticResource PageTitle}" />
+                <Button x:Name="RescanButton" Content="重新检测" HorizontalAlignment="Right" Click="Rescan_Click" />
             </Grid>
             <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}"
-                       Text="Conduit drives each agent through its official machine interface and uses your existing logins and settings. Installed agents are found on PATH and in their default locations; point to a custom install with Browse." />
+                       Text="Conduit 通过各 Agent 官方的程序接口驱动它们，沿用你在电脑上已有的登录和配置。会自动在 PATH 和默认安装位置查找；自定义安装位置可点“浏览”指定。" />
 
             <ItemsControl x:Name="AgentList" Margin="0,20,0,0">
                 <ItemsControl.ItemTemplate>
@@ -34,7 +34,7 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
                                     <TextBlock Text="{x:Bind Status}" Foreground="{x:Bind StatusBrush}" FontWeight="SemiBold" HorizontalAlignment="Right" />
-                                    <Button Content="Browse…" Tag="{x:Bind Id}" Click="Browse_Click" Visibility="{x:Bind BrowseVisibility}" HorizontalAlignment="Right" />
+                                    <Button Content="浏览…" Tag="{x:Bind Id}" Click="Browse_Click" Visibility="{x:Bind BrowseVisibility}" HorizontalAlignment="Right" />
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -42,19 +42,19 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <TextBlock Text="HOW TO INSTALL" Style="{StaticResource Eyebrow}" />
+            <TextBlock Text="安装方法" Style="{StaticResource Eyebrow}" />
             <Border Style="{StaticResource Card}">
                 <StackPanel Spacing="6">
-                    <TextBlock TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="Claude" /><Run Text=" — install Claude Desktop (includes Claude Code) or run: irm https://claude.ai/install.ps1 | iex" /></TextBlock>
-                    <TextBlock TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="Codex" /><Run Text=" — install Codex Desktop, or: npm i -g @openai/codex" /></TextBlock>
-                    <TextBlock TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="Pi" /><Run Text=" — npm i -g @mariozechner/pi-coding-agent" /></TextBlock>
-                    <TextBlock TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="opencode" /><Run Text=" — npm i -g opencode-ai  (or scoop install opencode)" /></TextBlock>
+                    <TextBlock TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="Claude" /><Run Text=" —— 安装 Claude Desktop（内含 Claude Code），或运行：irm https://claude.ai/install.ps1 | iex" /></TextBlock>
+                    <TextBlock TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="Codex" /><Run Text=" —— 安装 Codex Desktop，或运行：npm i -g @openai/codex" /></TextBlock>
+                    <TextBlock TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="Pi" /><Run Text=" —— npm i -g @mariozechner/pi-coding-agent" /></TextBlock>
+                    <TextBlock TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="opencode" /><Run Text=" —— npm i -g opencode-ai（或 scoop install opencode）" /></TextBlock>
                     <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}" FontSize="12"
-                               Text="Sign in to each agent once on this PC; Conduit reuses those credentials and never sees them." />
+                               Text="在这台电脑上登录过各 Agent 即可；Conduit 直接沿用这些登录，不会读取你的密码。" />
                 </StackPanel>
             </Border>
 
-            <ToggleSwitch x:Name="DemoToggle" Margin="0,16,0,0" Header="Demo agent (try the app without installing anything)" Toggled="Demo_Toggled" />
+            <ToggleSwitch x:Name="DemoToggle" Margin="0,16,0,0" Header="演示 Agent（无需安装任何东西即可体验）" Toggled="Demo_Toggled" />
         </StackPanel>
     </ScrollViewer>
 </Page>

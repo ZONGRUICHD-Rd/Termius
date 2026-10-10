@@ -65,6 +65,18 @@ final class PairingTests: XCTestCase {
         XCTAssertEqual(c.map(\.kind), [.lan, .tailscale, .relay])
         XCTAssertEqual(c[0].url.absoluteString, "ws://192.168.1.5:47821/v1/connect")
         XCTAssertEqual(c[2].url.absoluteString, "wss://relay.example.com/v1/connect/abc")
+
+        var lanOnly = host
+        lanOnly.preference = .lan
+        XCTAssertEqual(Endpoint.candidates(for: lanOnly).map(\.kind), [.lan, .tailscale])
+
+        var withKinds = host
+        withKinds.endpoints = ["wss://abc.trycloudflare.com", "ws://home.example.com:8443"]
+        withKinds.endpointKinds = ["cloudflare", "ddns"]
+        withKinds.manualEndpoints = ["my.example.org:9000"]
+        withKinds.preference = .ddns
+        let ddns = Endpoint.candidates(for: withKinds)
+        XCTAssertEqual(ddns.map(\.url.absoluteString), ["ws://home.example.com:8443/v1/connect", "ws://my.example.org:9000/v1/connect"])
     }
 
     func testRejectsGarbage() {

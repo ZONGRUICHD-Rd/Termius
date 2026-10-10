@@ -16,7 +16,7 @@ final class AppModel {
     }
     /// Set by deep links (conduit://session/<id>, Live Activity taps); consumed by the UI.
     var pendingSessionId: String?
-    var selectedTab: AppTab = .sessions
+    var selectedTab: AppTab = .agent("claude")
     var showPairing = false
 
     @ObservationIgnored let identity: DeviceIdentity
@@ -76,7 +76,7 @@ final class AppModel {
 
     enum PairingError: LocalizedError {
         case timeout
-        var errorDescription: String? { "Couldn't reach the computer. Make sure Conduit Host is running and on the same network, Tailscale or relay." }
+        var errorDescription: String? { "连接不到电脑。请确认 Conduit Host 正在运行，并且手机和电脑在同一网络，或已开启 Cloudflare Tunnel / DDNS。" }
     }
 
     /// Adds the host from a QR payload and waits until the encrypted connection is established.
@@ -89,7 +89,7 @@ final class AppModel {
         while Date() < deadline {
             switch client?.status {
             case .connected:
-                selectedTab = .sessions
+                selectedTab = .agent("claude")
                 return
             case .failed(let message):
                 removeHost(host.id)
@@ -143,6 +143,13 @@ final class AppModel {
         backgroundTask = .invalid
     }
 
+    /// Jumps to a session's chat from anywhere (Live Activity, Island, accessory).
+    func open(sessionId: String) {
+        let agent = store?.summaries[sessionId]?.agent ?? "claude"
+        selectedTab = .agent(primaryAgents.contains(agent) ? agent : "claude")
+        pendingSessionId = sessionId
+    }
+
     func handle(url: URL) {
         guard url.scheme == "conduit" else { return }
         switch url.host {
@@ -152,10 +159,7 @@ final class AppModel {
             }
         case "session":
             let id = url.lastPathComponent
-            if !id.isEmpty {
-                selectedTab = .sessions
-                pendingSessionId = id
-            }
+            if !id.isEmpty { open(sessionId: id) }
         default:
             break
         }
@@ -163,5 +167,9 @@ final class AppModel {
 }
 
 enum AppTab: Hashable {
-    case sessions, computers, settings
+    case agent(String)
+    case settings
 }
+
+/// The agents that get their own tab, in order.
+let primaryAgents = ["claude", "codex", "pi", "opencode"]

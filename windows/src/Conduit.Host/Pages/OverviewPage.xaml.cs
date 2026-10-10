@@ -41,29 +41,29 @@ public sealed partial class OverviewPage : Page
     {
         var r = App.Runtime;
 
-        DirectValue.Text = r.DirectListening ? $"Port {r.Config.Port}" : "Offline";
+        DirectValue.Text = r.DirectListening ? $"端口 {r.Config.Port}" : "未启动";
         var endpoints = r.Endpoints();
         DirectDetail.Text = r.DirectListening
-            ? (endpoints.Count == 0 ? "No network" : string.Join("\n", endpoints.Take(3).Select(e => $"{e.Kind}: {new Uri(e.Url).Host}")))
-            : r.DirectError ?? "Starting…";
+            ? (endpoints.Count == 0 ? "没有网络" : string.Join("\n", endpoints.Take(3).Select(e => $"{e.Kind}: {new Uri(e.Url).Host}")))
+            : r.DirectError ?? "正在启动…";
 
         (RelayValue.Text, RelayDetail.Text) = r.RelayStatus switch
         {
-            "online" => ("Relay online", r.Config.RelayUrl ?? ""),
-            "connecting" => ("Connecting…", r.Config.RelayUrl ?? ""),
-            "offline" => ("Relay offline", r.RelayError ?? r.Config.RelayUrl ?? ""),
+            "online" => ("中继在线", r.Config.RelayUrl ?? ""),
+            "connecting" => ("正在连接…", r.Config.RelayUrl ?? ""),
+            "offline" => ("中继离线", r.RelayError ?? r.Config.RelayUrl ?? ""),
             _ => endpoints.Any(e => e.Kind == "tailscale")
-                ? ("Tailscale", "Reachable from anywhere on your tailnet")
-                : ("LAN only", "Add a relay or install Tailscale to connect from anywhere"),
+                ? ("Tailscale", "在你的 Tailnet 内随处可连")
+                : ("仅局域网", "在“连接方式”中开启 Cloudflare Tunnel 或 DDNS"),
         };
 
         var conns = r.Connections.Where(c => c.Device is not null).ToList();
         PhonesValue.Text = conns.Count.ToString();
-        PhonesDetail.Text = $"{r.Config.Devices.Count} paired";
+        PhonesDetail.Text = $"已配对 {r.Config.Devices.Count} 台";
 
         var agents = r.Agents.List();
         AgentsValue.Text = agents.Count(a => a.Available).ToString();
-        AgentsDetail.Text = string.Join(", ", agents.Where(a => a.Available).Select(a => a.Name)) is { Length: > 0 } names ? names : "None detected";
+        AgentsDetail.Text = string.Join(", ", agents.Where(a => a.Available).Select(a => a.Name)) is { Length: > 0 } names ? names : "未检测到";
 
         SetupHint.IsOpen = r.Config.Devices.Count == 0;
 
@@ -82,8 +82,8 @@ public sealed partial class OverviewPage : Page
         var phones = conns.Select(c => new PhoneItem
         {
             Name = c.Device!.Name,
-            Route = c.Route switch { "relay" => "via relay", "tailscale" => "via Tailscale", _ => $"direct ({c.RemoteAddress})" },
-            Since = "since " + c.ConnectedAt.LocalDateTime.ToString("t"),
+            Route = c.Route switch { "relay" => "经中继", "tailscale" => "经 Tailscale", _ => $"直连（{c.RemoteAddress}）" },
+            Since = "连接于 " + c.ConnectedAt.LocalDateTime.ToString("t"),
         }).ToList();
         var psig = string.Join(";", phones.Select(p => p.Name + p.Route));
         if (psig != _phonesSig)
@@ -93,7 +93,7 @@ public sealed partial class OverviewPage : Page
         }
         NoPhones.Visibility = phones.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        Headline.Text = active.Count > 0 ? (active.Count == 1 ? "1 agent at work" : $"{active.Count} agents at work") : "All quiet";
+        Headline.Text = active.Count > 0 ? $"{active.Count} 个 Agent 正在工作" : "一切就绪";
     }
 
     private void Pair_Click(object sender, RoutedEventArgs e) => App.Window?.NavigateTo("pair");

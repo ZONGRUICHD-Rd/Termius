@@ -19,7 +19,7 @@
                         Background="{ThemeResource SubtleFillColorSecondaryBrush}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Ellipse x:Name="StatusDot" Width="7" Height="7" Fill="Gray" VerticalAlignment="Center" />
-                        <TextBlock x:Name="StatusText" Text="Starting…" FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock x:Name="StatusText" Text="正在启动…" FontSize="11" VerticalAlignment="Center" />
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -32,16 +32,19 @@
                         OpenPaneLength="220"
                         SelectionChanged="Nav_SelectionChanged">
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="Overview" Tag="overview">
+                <NavigationViewItem Content="概览" Tag="overview">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Pair a phone" Tag="pair">
+                <NavigationViewItem Content="配对手机" Tag="pair">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8EA;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Agents" Tag="agents">
+                <NavigationViewItem Content="连接方式" Tag="connection">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE774;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Agent" Tag="agents">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE99A;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Sessions" Tag="sessions">
+                <NavigationViewItem Content="会话" Tag="sessions">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8BD;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>

@@ -14,6 +14,9 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherQueueTimer _refresh;
     private bool _dirty = true;
 
+    /// <summary>Last time the UI thread ran the refresh timer (smoke-test diagnostics).</summary>
+    public static DateTime LastUiTick { get; private set; } = DateTime.MinValue;
+
     /// <summary>Pages subscribe to this; it fires on the UI thread at most ~5x per second.</summary>
     public event Action? RuntimeChanged;
 
@@ -32,6 +35,7 @@ public sealed partial class MainWindow : Window
         _refresh.Interval = TimeSpan.FromMilliseconds(200);
         _refresh.Tick += (_, _) =>
         {
+            LastUiTick = DateTime.UtcNow;
             if (!_dirty) return;
             _dirty = false;
             UpdateStatusChip();
@@ -48,9 +52,18 @@ public sealed partial class MainWindow : Window
         // CI smoke test: open every page once so a crash on any of them fails the build.
         if (Environment.GetEnvironmentVariable("CONDUIT_SMOKE") == "1")
         {
+            new Thread(() =>
+            {
+                for (var i = 0; i < 60; i++)
+                {
+                    Thread.Sleep(3000);
+                    var ago = LastUiTick == DateTime.MinValue ? "never" : $"{(DateTime.UtcNow - LastUiTick).TotalSeconds:F1}s ago";
+                    App.Runtime?.Log($"Smoke heartbeat: UI timer last ran {ago}");
+                }
+            }) { IsBackground = true }.Start();
             var tour = new Queue<Action>(new Action[]
             {
-                () => NavigateTo("pair"), () => NavigateTo("agents"), () => NavigateTo("sessions"),
+                () => NavigateTo("pair"), () => NavigateTo("connection"), () => NavigateTo("agents"), () => NavigateTo("sessions"),
                 () => Nav.SelectedItem = Nav.SettingsItem, () => NavigateTo("overview"),
             });
             var marker = Environment.GetEnvironmentVariable("CONDUIT_SMOKE_MARKER");
@@ -90,12 +103,12 @@ public sealed partial class MainWindow : Window
         if (!r.DirectListening && r.RelayStatus != "online")
         {
             StatusDot.Fill = new SolidColorBrush(ColorHelper.FromArgb(255, 0xBF, 0x4D, 0x43));
-            StatusText.Text = r.DirectError is null ? "Starting…" : "Not reachable";
+            StatusText.Text = r.DirectError is null ? "正在启动…" : "无法访问";
             return;
         }
         StatusDot.Fill = new SolidColorBrush(phones > 0 ? ColorHelper.FromArgb(255, 0x78, 0x8C, 0x5D) : ColorHelper.FromArgb(255, 0xD9, 0x77, 0x57));
-        var parts = new List<string> { phones == 1 ? "1 phone connected" : $"{phones} phones connected" };
-        if (running > 0) parts.Add(running == 1 ? "1 agent working" : $"{running} agents working");
+        var parts = new List<string> { $"{phones} 台手机已连接" };
+        if (running > 0) parts.Add($"{running} 个 Agent 工作中");
         StatusText.Text = string.Join(" · ", parts);
     }
 
@@ -109,6 +122,7 @@ public sealed partial class MainWindow : Window
         var page = ((args.SelectedItem as NavigationViewItem)?.Tag as string) switch
         {
             "pair" => typeof(PairPage),
+            "connection" => typeof(ConnectionPage),
             "agents" => typeof(AgentsPage),
             "sessions" => typeof(SessionsPage),
             _ => typeof(OverviewPage),

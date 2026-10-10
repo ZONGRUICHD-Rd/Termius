@@ -9,15 +9,18 @@ public struct PairingPayload: Codable, Hashable, Sendable {
     public var hostKey: Data
     public var token: String
     public var endpoints: [String]
+    public var endpointKinds: [String]?
     public var relay: String?
 
-    public init(version: Int = 1, hostId: String, hostName: String, hostKey: Data, token: String, endpoints: [String], relay: String?) {
+    public init(version: Int = 1, hostId: String, hostName: String, hostKey: Data, token: String, endpoints: [String],
+                endpointKinds: [String]? = nil, relay: String?) {
         self.version = version
         self.hostId = hostId
         self.hostName = hostName
         self.hostKey = hostKey
         self.token = token
         self.endpoints = endpoints
+        self.endpointKinds = endpointKinds
         self.relay = relay
     }
 
@@ -27,8 +30,8 @@ public struct PairingPayload: Codable, Hashable, Sendable {
 
         public var errorDescription: String? {
             switch self {
-            case .notAPairingCode: return "This isn't a Conduit pairing code."
-            case .unsupportedVersion(let v): return "Pairing code version \(v) isn't supported — update the app."
+            case .notAPairingCode: return "这不是 Conduit 的配对码。"
+            case .unsupportedVersion(let v): return "不支持版本 \(v) 的配对码，请更新 App。"
             }
         }
     }
@@ -49,8 +52,9 @@ public struct PairingPayload: Codable, Hashable, Sendable {
         }
         let v = json["v"]?.int ?? 1
         guard v == 1 else { throw ParseError.unsupportedVersion(v) }
-        return PairingPayload(version: v, hostId: id, hostName: json["n"]?.string ?? "Computer", hostKey: key, token: token,
-                              endpoints: json["e"]?.array?.compactMap(\.string) ?? [], relay: json["r"]?.string)
+        return PairingPayload(version: v, hostId: id, hostName: json["n"]?.string ?? "电脑", hostKey: key, token: token,
+                              endpoints: json["e"]?.array?.compactMap(\.string) ?? [],
+                              endpointKinds: json["ek"]?.array?.compactMap(\.string), relay: json["r"]?.string)
     }
 }
 
@@ -59,8 +63,13 @@ public struct PairedHost: Codable, Hashable, Identifiable, Sendable {
     public var id: String           // host id
     public var name: String
     public var hostKey: Data
-    public var endpoints: [String]  // ws://ip:port
+    public var endpoints: [String]  // ws://ip:port, wss://xxx.trycloudflare.com …
+    public var endpointKinds: [String]?
     public var relay: String?
+    /// Which routes this phone may use (nil = auto).
+    public var preference: RoutePreference?
+    /// Addresses typed on the phone (e.g. a DDNS "home.example.com:8443" or a Cloudflare hostname).
+    public var manualEndpoints: [String]?
     public var pairToken: String?   // only until the first successful connection
     public var pairedAt: Date
     public var lastRoute: String?
@@ -70,6 +79,7 @@ public struct PairedHost: Codable, Hashable, Identifiable, Sendable {
         name = payload.hostName
         hostKey = payload.hostKey
         endpoints = payload.endpoints
+        endpointKinds = payload.endpointKinds
         relay = payload.relay
         pairToken = payload.token
         pairedAt = Date()

@@ -21,12 +21,12 @@ public static class Palette
 
     public static string StateLabel(string state) => state switch
     {
-        "starting" => "Starting",
-        "running" => "Working",
-        "waiting" => "Needs approval",
-        "idle" => "Ready",
-        "error" => "Error",
-        _ => "Stopped",
+        "starting" => "启动中",
+        "running" => "工作中",
+        "waiting" => "等待批准",
+        "idle" => "就绪",
+        "error" => "出错",
+        _ => "已停止",
     };
 
     public static string AgentName(string id) => id switch
@@ -35,16 +35,16 @@ public static class Palette
         "codex" => "Codex",
         "pi" => "Pi",
         "opencode" => "opencode",
-        _ => "Demo",
+        _ => "演示",
     };
 
     public static string Ago(DateTimeOffset t)
     {
         var d = DateTimeOffset.Now - t;
-        if (d.TotalSeconds < 60) return "just now";
-        if (d.TotalMinutes < 60) return $"{(int)d.TotalMinutes} min ago";
-        if (d.TotalHours < 24) return $"{(int)d.TotalHours} h ago";
-        return t.LocalDateTime.ToString("d MMM");
+        if (d.TotalSeconds < 60) return "刚刚";
+        if (d.TotalMinutes < 60) return $"{(int)d.TotalMinutes} 分钟前";
+        if (d.TotalHours < 24) return $"{(int)d.TotalHours} 小时前";
+        return t.LocalDateTime.ToString("M月d日");
     }
 }
 
@@ -76,9 +76,9 @@ public sealed class SessionItem
             Title = (string?)s["title"] ?? "",
             AgentName = Palette.AgentName((string?)s["agent"] ?? ""),
             State = state,
-            StateLabel = (int?)s["approvals"] is > 0 and var n ? $"{n} to approve" : Palette.StateLabel(state),
+            StateLabel = (int?)s["approvals"] is > 0 and var n ? $"{n} 项待批准" : Palette.StateLabel(state),
             StateBrush = Palette.State(state),
-            Detail = active ? (string?)s["detail"] ?? "Working…" : (string?)s["preview"] ?? "",
+            Detail = active ? (string?)s["detail"] ?? "工作中…" : (string?)s["preview"] ?? "",
             Folder = Path.GetFileName(cwd.TrimEnd('\\', '/')) is { Length: > 0 } f ? f : cwd,
             Updated = Palette.Ago(DateTimeOffset.FromUnixTimeMilliseconds((long?)s["updatedAt"] ?? 0)),
             Progress = total > 0 ? 100.0 * done / total : 0,
@@ -121,7 +121,7 @@ public sealed class AgentItem
         Id = a.Id,
         Name = a.Name,
         Vendor = a.Vendor,
-        Status = a.Available ? (a.Version is { Length: > 0 } v ? v : "Installed") : "Not found",
+        Status = a.Available ? (a.Version is { Length: > 0 } v ? v : "已安装") : "未找到",
         StatusBrush = Palette.State(a.Available ? "idle" : "error"),
         PathText = a.Path ?? "",
         Detail = a.Detail,

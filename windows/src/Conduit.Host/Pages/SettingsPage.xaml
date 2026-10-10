@@ -7,48 +7,38 @@
 
     <ScrollViewer>
         <StackPanel Padding="40,28,40,40" MaxWidth="820" HorizontalAlignment="Left" Spacing="4">
-            <TextBlock Text="Settings" Style="{StaticResource PageTitle}" />
+            <TextBlock Text="设置" Style="{StaticResource PageTitle}" />
 
-            <TextBlock Text="THIS COMPUTER" Style="{StaticResource Eyebrow}" />
+            <TextBlock Text="这台电脑" Style="{StaticResource Eyebrow}" />
             <Border Style="{StaticResource Card}">
                 <StackPanel Spacing="12">
-                    <TextBox x:Name="HostNameBox" Header="Name shown on the phone" />
-                    <NumberBox x:Name="PortBox" Header="Direct port (LAN / Tailscale)" Minimum="1024" Maximum="65535" SpinButtonPlacementMode="Compact" />
-                    <ToggleSwitch x:Name="StartupToggle" Header="Start Conduit Host when I sign in" />
+                    <TextBox x:Name="HostNameBox" Header="在手机上显示的名称" />
+                    <NumberBox x:Name="PortBox" Header="直连端口" Minimum="1024" Maximum="65535" SpinButtonPlacementMode="Compact" />
+                    <ToggleSwitch x:Name="StartupToggle" Header="登录 Windows 时自动启动" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Allow through Windows Firewall…" Click="Firewall_Click" />
-                        <Button Content="Open data folder" Click="OpenData_Click" />
+                        <Button Content="允许通过 Windows 防火墙…" Click="Firewall_Click" />
+                        <Button Content="打开数据文件夹" Click="OpenData_Click" />
                     </StackPanel>
                 </StackPanel>
             </Border>
 
-            <TextBlock Text="CONNECT FROM ANYWHERE" Style="{StaticResource Eyebrow}" />
+            <TextBlock Text="IPHONE 灵动岛后台推送（可选）" Style="{StaticResource Eyebrow}" />
             <Border Style="{StaticResource Card}">
                 <StackPanel Spacing="12">
                     <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}"
-                               Text="Fastest: install Tailscale on this PC and your iPhone — Conduit finds it automatically and connects peer-to-peer. Or run the tiny Conduit relay on any server (see relay/README) and enter it here; it only forwards end-to-end encrypted bytes." />
-                    <TextBox x:Name="RelayBox" Header="Relay URL" PlaceholderText="wss://relay.example.com" />
-                    <TextBox x:Name="ExtraBox" Header="Extra addresses to advertise (one per line)" PlaceholderText="ws://my-pc.tailnet.ts.net:47821" AcceptsReturn="True" Height="80" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-
-            <TextBlock Text="IPHONE LIVE ACTIVITY PUSH (OPTIONAL)" Style="{StaticResource Eyebrow}" />
-            <Border Style="{StaticResource Card}">
-                <StackPanel Spacing="12">
-                    <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}"
-                               Text="Keeps the Dynamic Island updating while the Conduit app is in the background. Needs an APNs auth key (.p8) from your Apple Developer account and a build signed with your team. Not available in LiveContainer." />
-                    <ToggleSwitch x:Name="ApnsToggle" Header="Send Live Activity updates via APNs" />
+                               Text="让 Conduit 在后台时灵动岛也能继续更新。需要 Apple 开发者账号的 APNs 密钥（.p8），并用你的团队证书签名 App。LiveContainer 中不可用。" />
+                    <ToggleSwitch x:Name="ApnsToggle" Header="通过 APNs 推送实时活动更新" />
                     <TextBox x:Name="TeamBox" Header="Team ID" />
                     <TextBox x:Name="KeyIdBox" Header="Key ID" />
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button Content="Load .p8 key…" Click="LoadKey_Click" />
+                        <Button Content="载入 .p8 密钥…" Click="LoadKey_Click" />
                         <TextBlock x:Name="KeyStatus" VerticalAlignment="Center" Foreground="{ThemeResource ConduitInkSoftBrush}" />
                     </StackPanel>
                 </StackPanel>
             </Border>
 
             <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,18,0,0">
-                <Button Content="Save" Style="{StaticResource AccentButtonStyle}" Click="Save_Click" />
+                <Button Content="保存" Style="{StaticResource AccentButtonStyle}" Click="Save_Click" />
                 <TextBlock x:Name="SavedText" VerticalAlignment="Center" Foreground="{ThemeResource ConduitInkSoftBrush}" />
             </StackPanel>
         </StackPanel>

@@ -42,7 +42,7 @@ public sealed partial class PairPage : Page
 
         var expires = r.Config.PairingTokenCreated + HostRuntime.PairingTokenLifetime;
         var left = expires - DateTimeOffset.UtcNow;
-        ExpiryText.Text = left > TimeSpan.Zero ? $"Valid for {Math.Ceiling(left.TotalMinutes)} more minutes" : "Expired — create a new code";
+        ExpiryText.Text = left > TimeSpan.Zero ? $"还剩 {Math.Ceiling(left.TotalMinutes)} 分钟有效" : "已过期——请重新生成";
 
         var endpoints = r.Endpoints().Select(e => new EndpointItem { Kind = e.Kind, Url = e.Url }).ToList();
         if (!string.IsNullOrWhiteSpace(r.Config.RelayUrl))
@@ -56,8 +56,8 @@ public sealed partial class PairPage : Page
             Id = d.Id,
             Name = d.Name,
             Detail = connected.Contains(d.Id)
-                ? "Connected now"
-                : $"Paired {d.PairedAt.LocalDateTime:d MMM}" + (d.LastSeen is { } seen ? $" · last seen {Palette.Ago(seen)}" : ""),
+                ? "当前已连接"
+                : $"配对于 {d.PairedAt.LocalDateTime:M月d日}" + (d.LastSeen is { } seen ? $" · 最后在线 {Palette.Ago(seen)}" : ""),
             DotBrush = Palette.State(connected.Contains(d.Id) ? "idle" : "stopped"),
         }).ToList();
         var sig = string.Join(";", devices.Select(d => d.Id + d.Detail));
@@ -100,10 +100,10 @@ public sealed partial class PairPage : Page
         if ((sender as Button)?.Tag is not string id) return;
         var dialog = new ContentDialog
         {
-            Title = "Remove this phone?",
-            Content = "It will be disconnected and must scan a new QR code to pair again.",
-            PrimaryButtonText = "Remove",
-            CloseButtonText = "Cancel",
+            Title = "移除这台手机？",
+            Content = "它会被断开，之后需要重新扫码才能配对。",
+            PrimaryButtonText = "移除",
+            CloseButtonText = "取消",
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = XamlRoot,
         };

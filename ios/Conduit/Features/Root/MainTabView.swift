@@ -1,21 +1,22 @@
 import ConduitKit
 import SwiftUI
 
-/// Liquid Glass tab bar (system), a bottom accessory that behaves like a "now playing" bar for agents,
-/// and the in-app Island when the system Dynamic Island isn't available (LiveContainer, disabled).
+/// One tab per agent (like separate apps for Claude / Codex / Pi / opencode) plus Settings.
+/// The system tab bar is Liquid Glass; the bottom accessory works like a "now playing" bar for running agents,
+/// and the in-app Island stands in for the Dynamic Island when Live Activities aren't available.
 struct MainTabView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         @Bindable var model = model
         TabView(selection: $model.selectedTab) {
-            Tab("Agents", systemImage: "sparkles", value: AppTab.sessions) {
-                SessionsView()
+            ForEach(primaryAgents, id: \.self) { agent in
+                Tab(AgentStyle.of(agent).name, systemImage: Self.tabSymbol(agent), value: AppTab.agent(agent)) {
+                    AgentHomeView(agent: agent)
+                }
+                .badge(model.store?.sessions(for: agent).filter { $0.state == .waiting }.count ?? 0)
             }
-            Tab("Computers", systemImage: "desktopcomputer", value: AppTab.computers) {
-                HostsView()
-            }
-            Tab("Settings", systemImage: "gearshape", value: AppTab.settings) {
+            Tab("设置", systemImage: "gearshape", value: AppTab.settings) {
                 SettingsView()
             }
         }
@@ -32,9 +33,19 @@ struct MainTabView: View {
             PairView()
         }
     }
+
+    static func tabSymbol(_ agent: String) -> String {
+        switch agent {
+        case "claude": return "asterisk"
+        case "codex": return "chevron.left.forwardslash.chevron.right"
+        case "pi": return "function"
+        case "opencode": return "curlybraces"
+        default: return "sparkles"
+        }
+    }
 }
 
-/// The tab bar accessory: featured running agent (tap to open), or connection status + quick "new task".
+/// The tab bar accessory: featured running agent (tap to open), or the connection status.
 struct AgentAccessory: View {
     @Environment(AppModel.self) private var model
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
@@ -42,8 +53,7 @@ struct AgentAccessory: View {
     var body: some View {
         if let store = model.store, let s = store.featured {
             Button {
-                model.selectedTab = .sessions
-                model.pendingSessionId = s.id
+                model.open(sessionId: s.id)
             } label: {
                 HStack(spacing: 10) {
                     ZStack {
@@ -83,7 +93,7 @@ struct AgentAccessory: View {
                 if let client = model.client {
                     ConnectionBadge(status: client.status, rtt: placement == .inline ? nil : client.rttMs)
                 } else {
-                    Text("No computer").font(.caption.weight(.semibold))
+                    Text("未连接电脑").font(.caption.weight(.semibold))
                 }
                 Spacer()
                 if placement != .inline {

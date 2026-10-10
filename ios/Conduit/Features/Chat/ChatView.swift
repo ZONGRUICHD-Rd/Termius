@@ -1,4 +1,5 @@
 import ConduitKit
+import PhotosUI
 import SwiftUI
 
 struct ChatView: View {
@@ -11,11 +12,15 @@ struct ChatView: View {
     @State private var sendError: String?
     @State private var sending = false
     @State private var confirmDelete = false
+    @State private var showChanges = false
+    @State private var customModel = ""
+    @State private var askModel = false
     @Environment(\.dismiss) private var dismiss
 
     private var transcript: Transcript { store.transcript(for: sessionId) }
     private var summary: SessionSummary? { store.summaries[sessionId] }
     private var isActive: Bool { summary?.state.isActive == true }
+    private var info: AgentInfo? { summary.flatMap { store.agentInfo($0.agent) } }
 
     var body: some View {
         let t = transcript
@@ -47,29 +52,78 @@ struct ChatView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ChatDock(store: store, sessionId: sessionId, draft: $draft, sending: $sending, sendError: $sendError)
         }
-        .navigationTitle(summary?.title ?? "Session")
+        .navigationTitle(summary?.title ?? "对话")
         .navigationSubtitle(subtitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if summary?.isRepo == true {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showChanges = true
+                    } label: {
+                        if let s = summary, s.added + s.deleted > 0 {
+                            DiffStat(added: s.added, deleted: s.deleted)
+                        } else {
+                            Image(systemName: "arrow.triangle.pull")
+                        }
+                    }
+                    .accessibilityLabel("代码变更")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Toggle(isOn: $showReasoning) { Label("Show thinking", systemImage: "brain") }
-                    if isActive {
-                        Button("Interrupt", systemImage: "stop.circle") { Task { await store.interrupt(sessionId) } }
+                    if let models = info?.models {
+                        Menu {
+                            Button("默认") { setModel("") }
+                            ForEach(models, id: \.self) { m in Button(m) { setModel(m) } }
+                            Button("自定义…") { askModel = true }
+                        } label: {
+                            Label("模型：\(summary?.model ?? "默认")", systemImage: "cpu")
+                        }
                     }
-                    Button("Stop agent process", systemImage: "power") { Task { await store.stop(sessionId) } }
+                    if let modes = info?.modes, !modes.isEmpty {
+                        Menu {
+                            ForEach(modes) { m in
+                                Button {
+                                    setMode(m.id)
+                                } label: {
+                                    if (summary?.mode ?? "default") == m.id { Label(m.label, systemImage: "checkmark") } else { Text(m.label) }
+                                }
+                            }
+                        } label: {
+                            Label("模式：\(modes.first { $0.id == (summary?.mode ?? "default") }?.label ?? "默认")", systemImage: "dial.medium")
+                        }
+                    }
+                    Toggle(isOn: $showReasoning) { Label("显示思考过程", systemImage: "brain") }
+                    if summary?.isRepo == true {
+                        Button("查看代码变更", systemImage: "arrow.triangle.pull") { showChanges = true }
+                    }
                     Divider()
-                    Button("Delete session", systemImage: "trash", role: .destructive) { confirmDelete = true }
+                    if isActive {
+                        Button("中断", systemImage: "stop.circle") { Task { await store.interrupt(sessionId) } }
+                    }
+                    Button("停止 Agent 进程", systemImage: "power") { Task { await store.stop(sessionId) } }
+                    Button("删除对话", systemImage: "trash", role: .destructive) { confirmDelete = true }
                 } label: {
                     Image(systemName: "ellipsis")
                 }
             }
         }
-        .confirmationDialog("Delete this session?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
+        .confirmationDialog("删除这个对话？", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("删除", role: .destructive) {
                 Task { await store.delete(sessionId) }
                 dismiss()
             }
+        }
+        .alert("自定义模型", isPresented: $askModel) {
+            TextField("例如 opus 或 provider/model", text: $customModel)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button("取消", role: .cancel) {}
+            Button("使用") { setModel(customModel.trimmingCharacters(in: .whitespaces)) }
+        }
+        .sheet(isPresented: $showChanges) {
+            ChangesView(store: store, sessionId: sessionId)
         }
         .task(id: sessionId) {
             await store.subscribe(sessionId)
@@ -79,7 +133,16 @@ struct ChatView: View {
 
     private var subtitle: String {
         guard let s = summary else { return "" }
-        return "\(AgentStyle.of(s.agent).name) · \(s.folderName)"
+        if let branch = s.branch, !branch.isEmpty { return "\(s.folderName) · \(branch)" }
+        return s.folderName
+    }
+
+    private func setModel(_ m: String) {
+        Task { try? await store.setOptions(sessionId, model: m) }
+    }
+
+    private func setMode(_ m: String) {
+        Task { try? await store.setOptions(sessionId, mode: m) }
     }
 }
 
@@ -88,9 +151,7 @@ private struct WorkingIndicator: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            SparkShape()
-                .fill(Brand.clay)
-                .frame(width: 14, height: 14)
+            AgentGlyph(agent: summary.agent, size: 14)
                 .phaseAnimator([0.0, 180.0]) { v, angle in v.rotationEffect(.degrees(angle)) } animation: { _ in .linear(duration: 1.6) }
             Text(summary.detail ?? Brand.stateLabel(summary.state.rawValue))
                 .font(.callout)
@@ -118,11 +179,15 @@ private struct ChatDock: View {
     @Namespace private var glassNS
     @FocusState private var focused: Bool
     @State private var planOpen = false
+    @State private var attachments: [Attachment] = []
+    @State private var pickerItems: [PhotosPickerItem] = []
 
     private var transcript: Transcript { store.transcript(for: sessionId) }
     private var summary: SessionSummary? { store.summaries[sessionId] }
     private var isActive: Bool { summary?.state.isActive == true }
-    private var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending }
+    private var canSend: Bool {
+        (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty) && !sending
+    }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -141,17 +206,28 @@ private struct ChatDock: View {
             if let sendError {
                 Text(sendError).font(.caption).foregroundStyle(Brand.rust).transition(.opacity)
             }
+            if !attachments.isEmpty {
+                AttachmentStrip(attachments: $attachments)
+            }
 
             GlassEffectContainer(spacing: 10) {
                 HStack(alignment: .bottom, spacing: 10) {
-                    TextField(isActive ? "Steer the agent…" : "Message", text: $draft, axis: .vertical)
+                    PhotosPicker(selection: $pickerItems, maxSelectionCount: 4, matching: .images) {
+                        Image(systemName: "plus")
+                            .font(.body.weight(.semibold))
+                            .frame(width: 26, height: 26)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .glassEffectID("attach", in: glassNS)
+
+                    TextField(isActive ? "补充指示，Agent 会在当前步骤后处理…" : "回复…", text: $draft, axis: .vertical)
                         .lineLimit(1...6)
                         .focused($focused)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 11)
                         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
                         .glassEffectID("field", in: glassNS)
-                        .onSubmit(send)
 
                     if canSend || !isActive {
                         Button(action: send) {
@@ -177,7 +253,7 @@ private struct ChatDock: View {
                         .buttonStyle(.glass)
                         .buttonBorderShape(.circle)
                         .glassEffectID("action", in: glassNS)
-                        .accessibilityLabel("Interrupt")
+                        .accessibilityLabel("中断")
                     }
                 }
             }
@@ -188,19 +264,33 @@ private struct ChatDock: View {
         .animation(.bouncy(duration: 0.35), value: canSend)
         .animation(.bouncy(duration: 0.35), value: isActive)
         .animation(.smooth, value: transcript.pendingApprovals.map(\.id))
+        .animation(.smooth, value: attachments.count)
+        .onChange(of: pickerItems) { _, items in
+            Task {
+                for item in items {
+                    if let data = try? await item.loadTransferable(type: Data.self), let a = Attachment(imageData: data) {
+                        attachments.append(a)
+                    }
+                }
+                pickerItems = []
+            }
+        }
     }
 
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !sending else { return }
+        guard canSend else { return }
+        let images = attachments
         sending = true
         sendError = nil
         draft = ""
+        attachments = []
         Task {
             do {
-                try await store.send(sessionId, text: text)
+                try await store.send(sessionId, text: text, images: images)
             } catch {
                 draft = text
+                attachments = images
                 sendError = error.localizedDescription
             }
             sending = false
@@ -218,9 +308,9 @@ private struct ApprovalCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: icon).foregroundStyle(Brand.amber)
-                Text(item.title ?? "Approval needed").font(.headline).lineLimit(2)
+                Text(item.title ?? "需要你的确认").font(.headline).lineLimit(2)
                 Spacer()
-                if count > 1 { Text("1 of \(count)").font(.caption).foregroundStyle(.secondary) }
+                if count > 1 { Text("共 \(count) 项").font(.caption).foregroundStyle(.secondary) }
             }
             if !item.text.isEmpty {
                 Text(item.text)
@@ -230,14 +320,14 @@ private struct ApprovalCard: View {
                     .onTapGesture { withAnimation(.snappy) { expanded.toggle() } }
             }
             HStack(spacing: 8) {
-                Button("Deny", role: .destructive) { respond("deny") }
+                Button("拒绝", role: .destructive) { respond("deny") }
                     .buttonStyle(.glass)
                 Spacer()
                 if item.canAlways {
-                    Button("Always") { respond("allow_always") }
+                    Button("始终允许") { respond("allow_always") }
                         .buttonStyle(.glass)
                 }
-                Button("Allow") { respond("allow") }
+                Button("允许") { respond("allow") }
                     .buttonStyle(.glassProminent)
                     .tint(Brand.clay)
             }
@@ -274,9 +364,9 @@ private struct PlanCard: View {
                     RingProgress(progress: items.isEmpty ? 0 : Double(done) / Double(items.count), color: Brand.clay, lineWidth: 3)
                         .frame(width: 20, height: 20)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(current?.text ?? (done == items.count ? "All steps done" : "Plan"))
+                        Text(current?.text ?? (done == items.count ? "所有步骤已完成" : "计划"))
                             .font(.subheadline.weight(.semibold)).lineLimit(1)
-                        Text("\(done) of \(items.count) steps").font(.caption).foregroundStyle(.secondary)
+                        Text("已完成 \(done)/\(items.count) 步").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
                     Image(systemName: "chevron.up").font(.caption.weight(.bold)).foregroundStyle(.secondary)

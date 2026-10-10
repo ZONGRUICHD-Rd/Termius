@@ -23,12 +23,10 @@ public sealed partial class SettingsPage : Page
         var c = App.Runtime.Config;
         HostNameBox.Text = c.HostName;
         PortBox.Value = c.Port;
-        RelayBox.Text = c.RelayUrl ?? "";
-        ExtraBox.Text = string.Join("\r", c.ExtraEndpoints);
         ApnsToggle.IsOn = c.Apns.Enabled;
         TeamBox.Text = c.Apns.TeamId;
         KeyIdBox.Text = c.Apns.KeyId;
-        KeyStatus.Text = string.IsNullOrEmpty(c.Apns.PrivateKeyPem) ? "No key loaded" : "Key loaded";
+        KeyStatus.Text = string.IsNullOrEmpty(c.Apns.PrivateKeyPem) ? "尚未载入密钥" : "已载入密钥";
         using var key = Registry.CurrentUser.OpenSubKey(RunKey);
         StartupToggle.IsOn = key?.GetValue("ConduitHost") is not null;
     }
@@ -37,16 +35,11 @@ public sealed partial class SettingsPage : Page
     {
         var r = App.Runtime;
         var oldPort = r.Config.Port;
-        var oldRelay = r.Config.RelayUrl;
-        var relay = RelayBox.Text.Trim();
-        if (relay.Length > 0 && !relay.StartsWith("ws://") && !relay.StartsWith("wss://")) relay = "wss://" + relay;
 
         r.Update(c =>
         {
             c.HostName = string.IsNullOrWhiteSpace(HostNameBox.Text) ? Environment.MachineName : HostNameBox.Text.Trim();
             if (!double.IsNaN(PortBox.Value)) c.Port = (int)PortBox.Value;
-            c.RelayUrl = relay.Length == 0 ? null : relay;
-            c.ExtraEndpoints = ExtraBox.Text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
             c.Apns.Enabled = ApnsToggle.IsOn;
             c.Apns.TeamId = TeamBox.Text.Trim();
             c.Apns.KeyId = KeyIdBox.Text.Trim();
@@ -61,8 +54,7 @@ public sealed partial class SettingsPage : Page
         }
 
         if (r.Config.Port != oldPort) await r.RestartDirectAsync();
-        if (r.Config.RelayUrl != oldRelay) r.RestartRelay();
-        SavedText.Text = "Saved ✓";
+        SavedText.Text = "已保存 ✓";
     }
 
     private async void LoadKey_Click(object sender, RoutedEventArgs e)
@@ -76,7 +68,7 @@ public sealed partial class SettingsPage : Page
         // AuthKey_ABC123XYZ.p8 → key id
         var name = Path.GetFileNameWithoutExtension(file.Name);
         if (name.StartsWith("AuthKey_") && string.IsNullOrWhiteSpace(KeyIdBox.Text)) KeyIdBox.Text = name["AuthKey_".Length..];
-        KeyStatus.Text = $"{file.Name} (save to apply)";
+        KeyStatus.Text = $"{file.Name}（保存后生效）";
     }
 
     private void Firewall_Click(object sender, RoutedEventArgs e)

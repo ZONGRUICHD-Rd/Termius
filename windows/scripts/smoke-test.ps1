@@ -24,6 +24,7 @@ $crash = Join-Path $env:LOCALAPPDATA "Conduit/crash.log"
 Remove-Item $crash -ErrorAction SilentlyContinue
 
 function Show-Diagnostics {
+  try { $p.Refresh(); "--- responding: $($p.Responding) window: $($p.MainWindowHandle) title: '$($p.MainWindowTitle)'" } catch {}
   "--- tour progress: $(Get-Content "$marker.progress" -ErrorAction SilentlyContinue)"
   "--- host.log:"; Get-Content (Join-Path $data "host.log") -ErrorAction SilentlyContinue
   "--- crash.log:"; Get-Content $crash -ErrorAction SilentlyContinue

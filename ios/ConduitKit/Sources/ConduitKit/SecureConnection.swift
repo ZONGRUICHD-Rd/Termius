@@ -1,40 +1,97 @@
 import CryptoKit
 import Foundation
 
-public enum RouteKind: String, Sendable, Codable {
-    case lan, tailscale, relay, custom
+public enum RouteKind: String, Sendable, Codable, CaseIterable {
+    case lan, tailscale, cloudflare, ddns, relay, custom
 
     public var label: String {
         switch self {
-        case .lan: return "Local network"
+        case .lan: return "内网直连"
         case .tailscale: return "Tailscale"
-        case .relay: return "Relay"
-        case .custom: return "Direct"
+        case .cloudflare: return "Cloudflare Tunnel"
+        case .ddns: return "DDNS"
+        case .relay: return "中继"
+        case .custom: return "自定义地址"
         }
     }
 
-    public var isDirect: Bool { self != .relay }
+    public var symbol: String {
+        switch self {
+        case .lan: return "wifi"
+        case .tailscale: return "point.3.connected.trianglepath.dotted"
+        case .cloudflare: return "cloud.fill"
+        case .ddns: return "globe"
+        case .relay: return "arrow.triangle.branch"
+        case .custom: return "network"
+        }
+    }
+
+    /// LAN-like routes get a head start in the race.
+    public var isDirect: Bool { self == .lan || self == .tailscale }
+}
+
+/// Which routes the phone may use for a computer ("auto" races all of them).
+public enum RoutePreference: String, Sendable, Codable, CaseIterable, Identifiable {
+    case auto, lan, cloudflare, ddns, relay
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .auto: return "自动（选最快的）"
+        case .lan: return "仅内网直连"
+        case .cloudflare: return "仅 Cloudflare Tunnel"
+        case .ddns: return "仅 DDNS"
+        case .relay: return "仅中继"
+        }
+    }
+
+    func allows(_ kind: RouteKind) -> Bool {
+        switch self {
+        case .auto: return true
+        case .lan: return kind == .lan || kind == .tailscale
+        case .cloudflare: return kind == .cloudflare
+        case .ddns: return kind == .ddns || kind == .custom
+        case .relay: return kind == .relay
+        }
+    }
 }
 
 public struct Endpoint: Hashable, Sendable {
     public var url: URL
     public var kind: RouteKind
 
+    public static func classify(_ url: URL) -> RouteKind {
+        let h = url.host ?? ""
+        if h.hasSuffix(".trycloudflare.com") { return .cloudflare }
+        if h.hasPrefix("100.") || h.hasSuffix(".ts.net") { return .tailscale }
+        if h.hasPrefix("192.168.") || h.hasPrefix("10.") || h.hasPrefix("172.") || h.hasSuffix(".local") { return .lan }
+        return .custom
+    }
+
+    /// Every route allowed by the host's preference, in race order.
     public static func candidates(for host: PairedHost) -> [Endpoint] {
         var list: [Endpoint] = []
-        for e in host.endpoints {
+        let kinds = host.endpointKinds ?? []
+        for (i, e) in host.endpoints.enumerated() {
             guard let base = URL(string: e) else { continue }
-            let h = base.host ?? ""
-            let kind: RouteKind
-            if h.hasPrefix("100.") || h.hasSuffix(".ts.net") { kind = .tailscale }
-            else if h.hasPrefix("192.168.") || h.hasPrefix("10.") || h.hasPrefix("172.") { kind = .lan }
-            else { kind = .custom }
+            let kind = i < kinds.count ? (RouteKind(rawValue: kinds[i]) ?? classify(base)) : classify(base)
+            list.append(Endpoint(url: base.appendingPathComponent("v1/connect"), kind: kind))
+        }
+        for e in host.manualEndpoints ?? [] {
+            var text = e.trimmingCharacters(in: .whitespaces)
+            if !text.contains("://") { text = "ws://" + text }
+            text = text.replacingOccurrences(of: "https://", with: "wss://").replacingOccurrences(of: "http://", with: "ws://")
+            guard let base = URL(string: text) else { continue }
+            let kind: RouteKind = classify(base) == .cloudflare || base.scheme == "wss" && (base.port == nil) ? .cloudflare : .ddns
             list.append(Endpoint(url: base.appendingPathComponent("v1/connect"), kind: kind))
         }
         if let relay = host.relay, let base = URL(string: relay) {
             list.append(Endpoint(url: base.appendingPathComponent("v1/connect").appendingPathComponent(host.id), kind: .relay))
         }
-        return list
+        let pref = host.preference ?? .auto
+        var seen = Set<URL>()
+        return list.filter { pref.allows($0.kind) && seen.insert($0.url).inserted }
     }
 }
 
@@ -45,7 +102,7 @@ public enum HandshakeError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .rejected(_, let m): return m
-        case .protocolError(let m): return "Handshake failed: \(m)"
+        case .protocolError(let m): return "握手失败：\(m)"
         }
     }
 
@@ -112,13 +169,13 @@ public final class SecureConnection: @unchecked Sendable {
         case "welcome":
             break
         case "reject":
-            throw HandshakeError.rejected(reason: reply["reason"]?.string ?? "", message: reply["message"]?.string ?? "Rejected by host")
+            throw HandshakeError.rejected(reason: reply["reason"]?.string ?? "", message: reply["message"]?.string ?? "电脑拒绝了连接")
         default:
-            throw HandshakeError.protocolError("unexpected reply")
+            throw HandshakeError.protocolError("意外的回复")
         }
         guard let hostEphB64 = reply["hostEph"]?.string, let hostEph = Data(base64Encoded: hostEphB64),
               let nonceB64 = reply["nonce"]?.string, let nonceH = Data(base64Encoded: nonceB64), nonceH.count == 16 else {
-            throw HandshakeError.protocolError("malformed welcome")
+            throw HandshakeError.protocolError("回复格式错误")
         }
         let ee = try KeySchedule.agree(eph, hostEph)
         let es = try KeySchedule.agree(eph, host.hostKey)

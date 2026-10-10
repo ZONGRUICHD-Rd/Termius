@@ -8,9 +8,9 @@ public enum TransportError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .closed(let r): return r.map { "Connection closed: \($0)" } ?? "Connection closed"
-        case .unreachable(let r): return "Unreachable: \(r)"
-        case .timeout: return "Timed out"
+        case .closed(let r): return r.map { "连接已断开：\($0)" } ?? "连接已断开"
+        case .unreachable(let r): return "无法连接：\(r)"
+        case .timeout: return "连接超时"
         }
     }
 }
@@ -143,9 +143,9 @@ public final class WebSocketTransport: @unchecked Sendable {
 
     private static func describe(code: UInt16) -> String {
         switch code {
-        case 4404: return "Computer is offline (not connected to the relay)"
-        case 4408: return "Computer didn't answer through the relay"
-        case 4429: return "Relay busy"
+        case 4404: return "电脑不在线（没有连接到中继）"
+        case 4408: return "电脑没有通过中继响应"
+        case 4429: return "中继繁忙"
         default: return "code \(code)"
         }
     }

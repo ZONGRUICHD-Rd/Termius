@@ -100,7 +100,7 @@ final class LiveActivityController {
             self.lastState = state
             self.lastUpdate = Date()
             let alert: AlertConfiguration? = (urgent && state.isWaiting)
-                ? AlertConfiguration(title: "Approval needed",
+                ? AlertConfiguration(title: "需要你的确认",
                                      body: LocalizedStringResource(stringLiteral: "\(state.title): \(state.detail)"),
                                      sound: .default)
                 : nil

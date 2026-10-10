@@ -9,18 +9,17 @@ struct WelcomeView: View {
             PaperBackground()
             VStack(alignment: .leading, spacing: 28) {
                 Spacer()
-                SparkShape()
-                    .fill(Brand.clay)
-                    .frame(width: 64, height: 64)
+                ConduitMark()
+                    .frame(width: 72, height: 72)
                     .rotationEffect(.degrees(appear ? 0 : -40))
                     .scaleEffect(appear ? 1 : 0.6)
                     .opacity(appear ? 1 : 0)
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Your coding agents,\nanywhere.")
+                    Text("你的编程 Agent，\n随时随地。")
                         .font(.serif(.largeTitle, weight: .medium))
                         .foregroundStyle(Brand.ink)
-                    Text("Conduit connects to Claude, Codex, Pi and opencode running on your computer — end-to-end encrypted, over your Wi‑Fi, Tailscale or a relay.")
+                    Text("Conduit 连接你电脑上的 Claude、Codex、Pi 和 opencode——端到端加密，支持内网直连、Cloudflare Tunnel 和 DDNS。")
                         .font(.body)
                         .foregroundStyle(Brand.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)
@@ -29,9 +28,9 @@ struct WelcomeView: View {
                 .offset(y: appear ? 0 : 12)
 
                 VStack(alignment: .leading, spacing: 14) {
-                    step(1, "Install Conduit Host on your Windows PC")
-                    step(2, "Open it and click “Pair a phone”")
-                    step(3, "Scan the QR code")
+                    step(1, "在 Windows 电脑上安装 Conduit Host")
+                    step(2, "打开后点击“配对手机”")
+                    step(3, "扫描二维码")
                 }
                 .opacity(appear ? 1 : 0)
 
@@ -40,7 +39,7 @@ struct WelcomeView: View {
                 Button {
                     showPair = true
                 } label: {
-                    Label("Pair with a computer", systemImage: "qrcode.viewfinder")
+                    Label("配对电脑", systemImage: "qrcode.viewfinder")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)

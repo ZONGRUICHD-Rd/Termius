@@ -4,12 +4,12 @@ options:
   deploymentTarget:
     iOS: "26.0"
   createIntermediateGroups: true
-  developmentLanguage: en
+  developmentLanguage: zh-Hans
 settings:
   base:
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
-    MARKETING_VERSION: "1.0.0"
+    MARKETING_VERSION: "1.1.0"
     CURRENT_PROJECT_VERSION: "1"
     IPHONEOS_DEPLOYMENT_TARGET: "26.0"
     TARGETED_DEVICE_FAMILY: "1"
@@ -38,6 +38,8 @@ targets:
         CFBundleDisplayName: Conduit
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: zh-Hans
+        CFBundleLocalizations: [zh-Hans]
         LSRequiresIPhoneOS: true
         UILaunchScreen:
           UIColorName: LaunchBackground
@@ -51,8 +53,9 @@ targets:
         UIRequiredDeviceCapabilities: [arm64]
         NSSupportsLiveActivities: true
         NSSupportsLiveActivitiesFrequentUpdates: true
-        NSCameraUsageDescription: Conduit uses the camera to scan the pairing QR code shown on your computer.
-        NSLocalNetworkUsageDescription: Conduit connects directly to Conduit Host on your local network for the fastest connection.
+        NSCameraUsageDescription: Conduit 需要使用相机扫描电脑上显示的配对二维码。
+        NSLocalNetworkUsageDescription: Conduit 会在局域网内直连电脑上的 Conduit Host，以获得最快的速度。
+        NSPhotoLibraryUsageDescription: Conduit 需要访问照片，以便把截图发送给 Agent。
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
           - CFBundleURLName: dev.conduit.app

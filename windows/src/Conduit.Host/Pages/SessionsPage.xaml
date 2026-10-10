@@ -8,10 +8,10 @@
 
     <ScrollViewer>
         <StackPanel Padding="40,28,40,40" MaxWidth="1040">
-            <TextBlock Text="Sessions" Style="{StaticResource PageTitle}" />
+            <TextBlock Text="会话" Style="{StaticResource PageTitle}" />
             <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}"
-                       Text="Every conversation started from a phone. Sessions persist across restarts and resume with the agent's own session history." />
-            <TextBlock x:Name="Empty" Margin="0,20,0,0" Text="No sessions yet." Foreground="{ThemeResource ConduitInkSoftBrush}" />
+                       Text="从手机发起的所有对话。重启后会话仍在，并会接着 Agent 自己的会话记录继续。" />
+            <TextBlock x:Name="Empty" Margin="0,20,0,0" Text="还没有会话。" Foreground="{ThemeResource ConduitInkSoftBrush}" />
             <ItemsControl x:Name="SessionList" Margin="0,20,0,0">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="local:SessionItem">
@@ -33,8 +33,8 @@
                                 </StackPanel>
                                 <TextBlock Grid.Column="2" Text="{x:Bind StateLabel}" Foreground="{x:Bind StateBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <Button Content="Stop" Tag="{x:Bind Id}" Click="Stop_Click" Visibility="{x:Bind StopVisibility}" />
-                                    <Button Tag="{x:Bind Id}" Click="Delete_Click" ToolTipService.ToolTip="Delete">
+                                    <Button Content="停止" Tag="{x:Bind Id}" Click="Stop_Click" Visibility="{x:Bind StopVisibility}" />
+                                    <Button Tag="{x:Bind Id}" Click="Delete_Click" ToolTipService.ToolTip="删除">
                                         <FontIcon Glyph="&#xE74D;" FontSize="14" />
                                     </Button>
                                 </StackPanel>

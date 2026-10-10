@@ -8,9 +8,9 @@
 
     <ScrollViewer>
         <StackPanel Padding="40,28,40,40" MaxWidth="1040">
-            <TextBlock Text="Pair a phone" Style="{StaticResource PageTitle}" />
+            <TextBlock Text="配对手机" Style="{StaticResource PageTitle}" />
             <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource ConduitInkSoftBrush}"
-                       Text="Open Conduit on your iPhone, tap “Pair with a computer” and scan this code. Each code works once and expires after 30 minutes." />
+                       Text="在 iPhone 上打开 Conduit，点“配对电脑”扫描此二维码。每个二维码只能用一次，30 分钟后失效。" />
 
             <Grid Margin="0,24,0,0" ColumnSpacing="24">
                 <Grid.ColumnDefinitions>
@@ -23,16 +23,16 @@
                 </Border>
 
                 <StackPanel Grid.Column="1" Spacing="10">
-                    <TextBlock Text="CODE" Style="{StaticResource Eyebrow}" Margin="0" />
+                    <TextBlock Text="二维码" Style="{StaticResource Eyebrow}" Margin="0" />
                     <TextBlock x:Name="ExpiryText" Foreground="{ThemeResource ConduitInkSoftBrush}" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="New code" Click="NewCode_Click" Style="{StaticResource AccentButtonStyle}" />
-                        <Button Content="Copy pairing link" Click="Copy_Click" />
+                        <Button Content="重新生成" Click="NewCode_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="复制配对链接" Click="Copy_Click" />
                     </StackPanel>
                     <TextBlock Foreground="{ThemeResource ConduitInkSoftBrush}" FontSize="12" TextWrapping="Wrap"
-                               Text="No camera (e.g. in LiveContainer)? Copy the link, send it to your phone and paste it in the app." />
+                               Text="手机无法使用相机（例如在 LiveContainer 中）？复制链接发送到手机，在 App 中粘贴即可。" />
 
-                    <TextBlock Text="THE PHONE WILL TRY" Style="{StaticResource Eyebrow}" />
+                    <TextBlock Text="手机会尝试的地址" Style="{StaticResource Eyebrow}" />
                     <ItemsControl x:Name="EndpointList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="local:EndpointItem">
@@ -44,13 +44,13 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                     <InfoBar x:Name="AnywhereHint" IsOpen="False" IsClosable="False" Severity="Warning"
-                             Title="Only reachable on this network"
-                             Message="To connect from anywhere, install Tailscale on this PC and the iPhone, or set a relay URL in Settings." />
+                             Title="目前只能在局域网内连接"
+                             Message="要在外网使用，请在“连接方式”中开启 Cloudflare Tunnel 或 DDNS，或在电脑和 iPhone 上安装 Tailscale。" />
                 </StackPanel>
             </Grid>
 
-            <TextBlock Text="PAIRED PHONES" Style="{StaticResource Eyebrow}" />
-            <TextBlock x:Name="NoDevices" Text="None yet." Foreground="{ThemeResource ConduitInkSoftBrush}" />
+            <TextBlock Text="已配对的手机" Style="{StaticResource Eyebrow}" />
+            <TextBlock x:Name="NoDevices" Text="暂无。" Foreground="{ThemeResource ConduitInkSoftBrush}" />
             <ItemsControl x:Name="DeviceList">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="local:DeviceItem">
@@ -66,7 +66,7 @@
                                     <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" />
                                     <TextBlock Text="{x:Bind Detail}" FontSize="12" Foreground="{ThemeResource ConduitInkSoftBrush}" />
                                 </StackPanel>
-                                <Button Grid.Column="2" Content="Remove" Tag="{x:Bind Id}" Click="Remove_Click" />
+                                <Button Grid.Column="2" Content="移除" Tag="{x:Bind Id}" Click="Remove_Click" />
                             </Grid>
                         </Border>
                     </DataTemplate>

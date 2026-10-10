@@ -40,7 +40,7 @@ struct AgentLiveActivity: Widget {
                                 .frame(maxWidth: 64)
                         }
                         if s.running > 1 {
-                            Text("\(s.running) agents").font(.caption2).foregroundStyle(.secondary)
+                            Text("\(s.running) 个 Agent").font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                     .padding(.trailing, 4)
@@ -68,7 +68,7 @@ struct AgentLiveActivity: Widget {
                             .tint(Brand.stateColor(s.state))
                         }
                         if s.isWaiting {
-                            Label("Open Conduit to approve", systemImage: "hand.raised.fill")
+                            Label("打开 Conduit 进行确认", systemImage: "hand.raised.fill")
                                 .font(.caption2.weight(.semibold)).foregroundStyle(Brand.amber)
                         }
                     }
@@ -161,7 +161,7 @@ private struct LockScreenView: View {
                     Text(hostName)
                     if state.running > 1 {
                         Text("·")
-                        Text("\(state.running) agents")
+                        Text("\(state.running) 个 Agent")
                     }
                 }
                 .font(.caption.weight(.medium)).foregroundStyle(.secondary)

@@ -27,8 +27,8 @@ public enum ClientError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .notConnected: return "Not connected to your computer"
-        case .noEndpoints: return "No way to reach this computer — add a relay or Tailscale address on the host"
+        case .notConnected: return "未连接到电脑"
+        case .noEndpoints: return "没有可用的连接方式。请在“设置 → 电脑 → 连接方式”中开启内网直连、Cloudflare Tunnel 或 DDNS。"
         }
     }
 }
@@ -212,7 +212,12 @@ public final class ConduitClient {
             let hi = HostInfo(json: info)
             hostInfo = hi
             var h = host
-            if !hi.endpoints.isEmpty { h.endpoints = hi.endpoints }
+            if !hi.routes.isEmpty {
+                h.endpoints = hi.routes.map(\.url)
+                h.endpointKinds = hi.routes.map(\.kind.rawValue)
+            } else if !hi.endpoints.isEmpty {
+                h.endpoints = hi.endpoints
+            }
             h.relay = hi.relay ?? h.relay
             if !hi.hostName.isEmpty { h.name = hi.hostName }
             if h != host {
@@ -258,7 +263,7 @@ public final class ConduitClient {
             if msg["ok"]?.bool == true {
                 cont.resume(returning: msg["r"] ?? .null)
             } else {
-                cont.resume(throwing: ServerError(message: msg["err"]?.string ?? "Request failed", code: msg["code"]?.string ?? "error"))
+                cont.resume(throwing: ServerError(message: msg["err"]?.string ?? "请求失败", code: msg["code"]?.string ?? "error"))
             }
         case "evt":
             if let name = msg["e"]?.string { onEvent?(name, msg["p"] ?? .null) }
@@ -310,6 +315,59 @@ public final class ConduitClient {
                 }
             }
         }
+    }
+
+    /// Re-reads host.info (after changing connection settings on the computer).
+    public func refreshHostInfo() async {
+        guard let info = try? await request("host.info") else { return }
+        let hi = HostInfo(json: info)
+        hostInfo = hi
+        var h = host
+        if !hi.routes.isEmpty {
+            h.endpoints = hi.routes.map(\.url)
+            h.endpointKinds = hi.routes.map(\.kind.rawValue)
+        }
+        h.relay = hi.relay
+        if h != host {
+            host = h
+            onHostUpdated?(h)
+        }
+    }
+
+    public struct RouteProbe: Identifiable, Sendable {
+        public var endpoint: Endpoint
+        public var milliseconds: Int?
+        public var error: String?
+        public var id: URL { endpoint.url }
+    }
+
+    /// Tries every allowed route independently (full encrypted handshake) and reports latency or the error.
+    public func probeRoutes() async -> [RouteProbe] {
+        let host = self.host, identity = self.identity, name = self.deviceName
+        let candidates = Endpoint.candidates(for: host)
+        return await withTaskGroup(of: RouteProbe.self) { group in
+            for c in candidates {
+                group.addTask {
+                    let start = Date()
+                    do {
+                        let conn = try await SecureConnection.open(endpoint: c, host: host, identity: identity, deviceName: name)
+                        conn.close()
+                        return RouteProbe(endpoint: c, milliseconds: Int(Date().timeIntervalSince(start) * 1000))
+                    } catch {
+                        return RouteProbe(endpoint: c, error: error.localizedDescription)
+                    }
+                }
+            }
+            var out: [RouteProbe] = []
+            for await r in group { out.append(r) }
+            return out.sorted { ($0.milliseconds ?? .max) < ($1.milliseconds ?? .max) }
+        }
+    }
+
+    /// Reconnect now (e.g. after the route preference changed).
+    public func reconnect() {
+        stop()
+        start()
     }
 
     // MARK: heartbeat, migration, network changes

@@ -60,7 +60,7 @@ struct CodeBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(language.isEmpty ? "code" : language).font(.caption2.weight(.semibold).monospaced()).foregroundStyle(.secondary)
+                Text(language.isEmpty ? "代码" : language).font(.caption2.weight(.semibold).monospaced()).foregroundStyle(.secondary)
                 Spacer()
                 Button {
                     UIPasteboard.general.string = code

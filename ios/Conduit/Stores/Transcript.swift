@@ -27,6 +27,7 @@ struct ChatItem: Identifiable, Equatable {
     var canAlways = true
     var decision: String?
     var ts: Date = Date()
+    var images = 0
     /// Bumped on every mutation so Equatable rows re-render cheaply only when needed.
     var revision = 0
 }
@@ -80,7 +81,7 @@ final class Transcript {
         let ev = e.ev
         switch e.kind {
         case "user":
-            items.append(ChatItem(id: "u\(e.seq)", kind: .user, text: ev["text"]?.string ?? "", ts: e.ts))
+            items.append(ChatItem(id: "u\(e.seq)", kind: .user, text: ev["text"]?.string ?? "", ts: e.ts, images: ev["images"]?.int ?? 0))
             index["u\(e.seq)"] = items.count - 1
 
         case "delta":
