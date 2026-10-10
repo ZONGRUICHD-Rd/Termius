@@ -19,6 +19,7 @@ public partial class App : Application
         UnhandledException += (_, e) =>
         {
             Runtime?.Log("Unhandled: " + e.Exception.Message);
+            CrashReporter.Report(e.Exception, "Unexpected error");
             e.Handled = true;
         };
     }
@@ -32,15 +33,23 @@ public partial class App : Application
             return;
         }
 
-        Runtime = new HostRuntime(HostRuntime.DefaultDataDirectory(), new DpapiProtector());
-        _window = new MainWindow();
-        Window = _window;
-        _window.Activate();
-        await Runtime.StartAsync();
+        try
+        {
+            Runtime = new HostRuntime(HostRuntime.DefaultDataDirectory(), new DpapiProtector());
+            _window = new MainWindow();
+            Window = _window;
+            _window.Activate();
+            await Runtime.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            CrashReporter.Report(ex, "Conduit Host could not start");
+            Exit();
+        }
     }
 }
 
-/// Encrypts the host's private keys at rest with the current Windows user's DPAPI key.
+/// <summary>Encrypts the host's private keys at rest with the current Windows user's DPAPI key.</summary>
 public sealed class DpapiProtector : ISecretProtector
 {
     private static readonly byte[] Entropy = "conduit-host-v1"u8.ToArray();
