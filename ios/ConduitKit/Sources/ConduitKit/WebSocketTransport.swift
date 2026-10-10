@@ -119,8 +119,14 @@ public final class WebSocketTransport: @unchecked Sendable {
                 switch meta?.opcode {
                 case .close:
                     var reason: String?
-                    if case .protocolCode(let code) = meta?.closeCode { reason = "\(code)" }
-                    if case .applicationCode(let code) = meta?.closeCode { reason = Self.describe(code: code) }
+                    if let closeCode = meta?.closeCode {
+                        switch closeCode {
+                        case .applicationCode(let code): reason = Self.describe(code: code)
+                        case .privateCode(let code): reason = "code \(code)"
+                        case .protocolCode(let code): reason = "\(code)"
+                        @unknown default: break
+                        }
+                    }
                     cont.resume(throwing: TransportError.closed(reason))
                 case .text:
                     cont.resume(returning: (content ?? Data(), true))
